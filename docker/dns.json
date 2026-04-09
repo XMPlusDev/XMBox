@@ -1,0 +1,22 @@
+{
+  "dns": {
+    "servers": [
+      { "tag": "cloudflare", "address": "https://1.1.1.1/dns-query" },
+      { "tag": "alibaba", "address": "223.5.5.5" },
+      { "tag": "block", "address": "rcode://success" }
+    ],
+    "rules": [
+      {
+        "rule_set": ["geosite:category-ads-all"],
+        "action": "route",
+        "server": "block"
+      },
+      {
+        "rule_set": ["geosite:cn"],
+        "action": "route",
+        "server": "alibaba"
+      }
+    ],
+    "final": "cloudflare"
+  }
+}

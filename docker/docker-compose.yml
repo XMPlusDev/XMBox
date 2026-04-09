@@ -1,0 +1,7 @@
+services: 
+  xmbox: 
+    image: ghcr.io/xmplusdev/xmbox:latest
+    volumes:
+      - /etc/XMBox/:/etc/XMBox/
+    restart: always
+    network_mode: host
