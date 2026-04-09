@@ -30,16 +30,11 @@ import (
 	"github.com/sagernet/sing/common/ntp"
 )
 
-var _ adapter.TCPInjectableInbound = (*ShadowsocksInbound)(nil)
+var (
+	_ adapter.TCPInjectableInbound = (*ShadowsocksInbound)(nil)
+	_ adapter.ManagedSSMServer     = (*ShadowsocksInbound)(nil)
+)
 
-// ShadowsocksInbound is a sing-box Shadowsocks multi-user inbound with
-// zero-downtime hot user management via AddUsers / DelUsers.
-//
-// Authentication happens once per connection inside the service cipher layer.
-// After that the user slot index is stored in ctx; the router goroutine runs
-// entirely independently of the user table.  Calling DelUsers zeroes the slot
-// and calls service.UpdateUsersWithPasswords — new connections from that user
-// are rejected, but in-flight connections are not touched.
 type ShadowsocksInbound struct {
 	inbound.Adapter
 	ctx      context.Context
@@ -47,6 +42,7 @@ type ShadowsocksInbound struct {
 	logger   logger.ContextLogger
 	listener *listener.Listener
 	service  shadowsocks.MultiService[int]
+	tracker  adapter.SSMTracker
 
 	// user state — grows monotonically, slots are never reused
 	mu       sync.Mutex
@@ -155,6 +151,30 @@ func (h *ShadowsocksInbound) Close() error {
 	return h.listener.Close()
 }
 
+// ─── ManagedSSMServer ────────────────────────────────────────────────────────
+
+func (h *ShadowsocksInbound) SetTracker(tracker adapter.SSMTracker) {
+	h.tracker = tracker
+}
+
+// UpdateUsers replaces the entire user list atomically and pushes the new set
+// into the Shadowsocks service. Indices are assigned 0…N-1 in order.
+func (h *ShadowsocksInbound) UpdateUsers(users []string, uPSKs []string) error {
+	h.mu.Lock()
+	h.users = make([]option.ShadowsocksUser, len(users))
+	h.slotMap = make(map[string]int, len(users))
+	for i, name := range users {
+		h.users[i] = option.ShadowsocksUser{Name: name, Password: uPSKs[i]}
+		h.slotMap[name] = i
+	}
+	h.rebuildSnapLocked()
+	h.mu.Unlock()
+	return h.service.UpdateUsersWithPasswords(
+		common.MapIndexed(users, func(i int, _ string) int { return i }),
+		uPSKs,
+	)
+}
+
 // ─── hot user management ─────────────────────────────────────────────────────
 
 // AddUsers upserts Shadowsocks users by Name. Existing slots are updated
@@ -250,6 +270,9 @@ func (h *ShadowsocksInbound) newConnection(ctx context.Context, conn net.Conn, m
 	metadata.InboundType = h.Type()
 	//nolint:staticcheck
 	metadata.InboundDetour = h.listener.ListenOptions().Detour
+	if h.tracker != nil {
+		conn = h.tracker.TrackConnection(conn, metadata)
+	}
 	return h.router.RouteConnection(ctx, conn, metadata)
 }
 
@@ -263,11 +286,15 @@ func (h *ShadowsocksInbound) newPacketConnection(ctx context.Context, conn N.Pac
 		metadata.User = user
 	}
 	ctx = log.ContextWithNewID(ctx)
+	h.logger.InfoContext(ctx, "[", user, "] inbound packet connection from ", metadata.Source)
 	h.logger.InfoContext(ctx, "[", user, "] inbound packet connection to ", metadata.Destination)
 	metadata.Inbound = h.Tag()
 	metadata.InboundType = h.Type()
 	//nolint:staticcheck
 	metadata.InboundDetour = h.listener.ListenOptions().Detour
+	if h.tracker != nil {
+		conn = h.tracker.TrackPacketConnection(conn, metadata)
+	}
 	return h.router.RoutePacketConnection(ctx, conn, metadata)
 }
 
@@ -291,10 +318,6 @@ func (h *ShadowsocksInbound) NewError(ctx context.Context, err error) {
 	}
 	h.logger.ErrorContext(ctx, err)
 }
-
-// ─── ssStubPacketConn ────────────────────────────────────────────────────────
-// Required by NewPacketEx: the service needs a PacketConn for writing replies,
-// but never calls Read on it (packets arrive via NewPacket, not Read).
 
 var _ N.PacketConn = (*ssStubPacketConn)(nil)
 

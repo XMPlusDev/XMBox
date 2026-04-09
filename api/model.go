@@ -11,7 +11,6 @@ const (
 	RuleNotModified = "rules_not_modified"
 )
 
-// Config API config
 type Config struct {
 	APIHost 		string 		`mapstructure:"ApiHost"`
 	NodeID  		int    		`mapstructure:"NodeID"`
@@ -29,20 +28,24 @@ type PostData struct {
 }
 
 type serverConfig struct {
-	Protocol        	string 				`json:"protocol"`
+	server  `json:"server"`
+}
+
+type server struct {
+	Protocol        	string 				`json:"type"`
 	ServerSpeedlimit  	int    			 	`json:"speed_limit"`
-	ListenAddr          string   			`json:"listen_ip"`
-	ListenPort          int    				`json:"listen_port"`
-	TCPFastOpen         bool				`json:"tcp_fast_open"`
+	ServerKey  	        string    			`json:"server_key"`
+	Addr                string   			`json:"address"`
+	IP                  string   			`json:"ip"`
 	NetworkSettings     *json.RawMessage 	`json:"transportSettings"`
 	SecuritySettings    *json.RawMessage 	`json:"securitySettings"`
 	UpdateInterval   	int 				`json:"update_interval"`
-	RulesSettings      []rule               `json:"rules"`
+	RulesSettings       []rule              `json:"rules"`
 }
 
 type rule struct {
 	Id       int      `json:"id"`
-	Regex    string   `json:"regex"`
+	Regex    string   `json:"value"`
 }
 
 type SubscriptionResponse struct {
@@ -51,15 +54,14 @@ type SubscriptionResponse struct {
 
 type Subscription struct {
 	Id         	int    		`json:"id"`
-	UUID     	string 		`json:"uuid"`
+	UUID     	string 		`json:"passwd"`
 	Speedlimit 	int    		`json:"speed_limit"`
 	Iplimit    	int    		`json:"ip_limit"`
 }
 
 type NetworkSettings struct {
 	Type     	string   	
-	Cipher      string   
-	ServerKey   string   
+	Cipher      string     
 	
 	// WebSocket
 	Path    string  
@@ -114,6 +116,7 @@ type TlsSettings struct {
 
 type NodeInfo struct {
 	ID          	int
+	ServerKey       string
 	Protocol        string
 	SpeedLimit      uint64
 	UpdateInterval  int

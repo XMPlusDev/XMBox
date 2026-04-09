@@ -163,8 +163,9 @@ func getInboundOptions(tag string, nodeInfo *api.NodeInfo, config *Config) (opti
 		in.Options = &option.ShadowsocksInboundOptions{
 			ListenOptions: listen,
 			Method:        nodeInfo.NetworkSettings.Cipher,
-			Password:      nodeInfo.NetworkSettings.ServerKey,
+			Password:      nodeInfo.ServerKey,
 			Multiplex:     multiplex,
+			Managed:       true, 
 		}
 
 	case "shadowtls":
@@ -198,6 +199,39 @@ func getInboundOptions(tag string, nodeInfo *api.NodeInfo, config *Config) (opti
 	}
 
 	return in, nil
+}
+
+func buildTransport(nodeInfo *api.NodeInfo) (*option.V2RayTransportOptions, error) {
+	t := &option.V2RayTransportOptions{Type: nodeInfo.NetworkSettings.Type}
+	
+	switch nodeInfo.NetworkSettings.Type {
+	case "tcp", "":
+		if nodeInfo.NetworkSettings.HeaderType == "http" {
+			t.Type = "http"
+			t.HTTPOptions.Method = nodeInfo.NetworkSettings.Method
+			t.HTTPOptions.Path = nodeInfo.NetworkSettings.Path
+			t.HTTPOptions.Host = badoption.Listable[string]([]string{nodeInfo.NetworkSettings.Host})
+		}
+		return nil, nil
+
+	case "ws":
+		t.WebsocketOptions = option.V2RayWebsocketOptions{
+			Path:                nodeInfo.NetworkSettings.Path,
+			EarlyDataHeaderName: "Sec-WebSocket-Protocol",
+			MaxEarlyData:        nodeInfo.NetworkSettings.MaxEarlyData,
+		}
+
+	case "grpc":
+		t.GRPCOptions = option.V2RayGRPCOptions{ServiceName: nodeInfo.NetworkSettings.ServiceName}
+
+	case "httpupgrade":
+		t.HTTPUpgradeOptions = option.V2RayHTTPUpgradeOptions{
+			Path: nodeInfo.NetworkSettings.Path, 
+			Host: nodeInfo.NetworkSettings.Host,
+		}
+	}
+
+	return t, nil
 }
 
 func getCertFile(certConfig *cert.CertConfig, CertMode string, Domain string) (certFile string, keyFile string, err error) {
@@ -234,37 +268,4 @@ func getCertFile(certConfig *cert.CertConfig, CertMode string, Domain string) (c
 	default:
 		return "", "", fmt.Errorf("unsupported certmode: %s", CertMode)
 	}
-}
-
-func buildTransport(nodeInfo *api.NodeInfo) (*option.V2RayTransportOptions, error) {
-	t := &option.V2RayTransportOptions{Type: nodeInfo.NetworkSettings.Type}
-	
-	switch nodeInfo.NetworkSettings.Type {
-	case "tcp", "":
-		if nodeInfo.NetworkSettings.HeaderType == "http" {
-			t.Type = "http"
-			t.HTTPOptions.Method = nodeInfo.NetworkSettings.Method
-			t.HTTPOptions.Path = nodeInfo.NetworkSettings.Path
-			t.HTTPOptions.Host = badoption.Listable[string]([]string{nodeInfo.NetworkSettings.Host})
-		}
-		return nil, nil
-
-	case "ws":
-		t.WebsocketOptions = option.V2RayWebsocketOptions{
-			Path:                nodeInfo.NetworkSettings.Path,
-			EarlyDataHeaderName: "Sec-WebSocket-Protocol",
-			MaxEarlyData:        nodeInfo.NetworkSettings.MaxEarlyData,
-		}
-
-	case "grpc":
-		t.GRPCOptions = option.V2RayGRPCOptions{ServiceName: nodeInfo.NetworkSettings.ServiceName}
-
-	case "httpupgrade":
-		t.HTTPUpgradeOptions = option.V2RayHTTPUpgradeOptions{
-			Path: nodeInfo.NetworkSettings.Path, 
-			Host: nodeInfo.NetworkSettings.Host,
-		}
-	}
-
-	return t, nil
 }

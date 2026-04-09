@@ -15,7 +15,7 @@ func (c *Client) GetNodeInfo() (*NodeInfo, error) {
 
 	server := new(serverConfig)
 	res, err := c.client.R().
-		SetBody(map[string]string{"key": c.APIKey}).
+		SetBody(map[string]string{"key": c.APIKey, "core": "singbox"}).
 		ForceContentType("application/json").
 		SetPathParam("serverId", strconv.Itoa(c.NodeID)).
 		SetHeader("If-None-Match", c.eTags["server"]).
@@ -59,9 +59,7 @@ func (c *Client) NodeResponse(s *serverConfig) (*NodeInfo, error) {
 	nodeInfo := &NodeInfo{}
 	
 	nodeInfo.ID = c.NodeID
-	nodeInfo.ListenAddr = s.ListenAddr
-	nodeInfo.ListenPort = uint16(s.ListenPort)
-	nodeInfo.TCPFastOpen = bool(s.TCPFastOpen)
+	nodeInfo.ServerKey = s.ServerKey
 	nodeInfo.UpdateInterval = int(s.UpdateInterval)
 	nodeInfo.Protocol = strings.ToLower(s.Protocol)
 	nodeInfo.SpeedLimit = uint64(s.ServerSpeedlimit * 1000000 / 8)
@@ -101,6 +99,19 @@ func (c *Client) NodeResponse(s *serverConfig) (*NodeInfo, error) {
 
 func (c *Client) parseNetworkSettings(networkData *simplejson.Json, nodeInfo *NodeInfo) error {
 	nodeInfo.NetworkSettings = &NetworkSettings{}
+	
+	networkIP, ipExist := networkData.CheckGet("listen_ip")
+	if ipExist {
+		nodeInfo.ListenAddr = networkIP.MustString()
+	}
+	networkPort, portExist := networkData.CheckGet("listen_port")
+	if portExist {
+		nodeInfo.ListenPort = uint16(networkPort.MustInt())
+	}
+	networkTCPFastOpen, fastOpenExist := networkData.CheckGet("tcp_fast_open")
+	if fastOpenExist {
+		nodeInfo.TCPFastOpen = networkTCPFastOpen.MustBool()
+	}
 	
 	networkCipher, cipherExist := networkData.CheckGet("cipher")
 	if cipherExist {
