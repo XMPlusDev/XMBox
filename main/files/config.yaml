@@ -1,0 +1,36 @@
+DnsFile: /etc/XMBox/dns.json 
+RouteFile: /etc/XMBox/route.json 
+Log:
+  Level: info                                   # debug | info | warn | error
+  Disabled: true                                # true, flase
+  Output:                                       #/etc/XMBox/output.log
+Ntp:
+    Enable: false
+    Server: time.cloudflare.com
+    ServerPort: 53
+Multiplex:                                
+    Enabled: true                               # true, flase
+    Padding: true                               # true, flase
+Nodes:
+  -
+    ApiConfig:
+      ApiHost: "https://www.xyz.com"            # Panel api address https://api.tld.com
+      ApiKey: "123"                             # Panel server api key
+      NodeID: 1                                 # Server (Node) id of the server to connect
+      Timeout: 30                               # Timeout for backened server to get response from panel api 
+    CertConfig:
+      Email: author@cert.xyz                    # Required when Cert Mode is not none
+      CertFile: /etc/XMBox/node1.crt            # Required when Cert Mode is file
+      KeyFile: /etc/XMBox/node1.key             # Required when Cert Mode is file
+      Provider: cloudflare                      # Required when Cert Mode is dns
+      CertEnv:                                  # Required when Cert Mode is dns
+        CLOUDFLARE_EMAIL:                       # Required when Cert Mode is dns
+        CLOUDFLARE_API_KEY:                     # Required when Cert Mode is dns
+    RedisConfig:
+      Enable: false                             # Enable the global ip limit of a user
+      Network: tcp                              # Redis protocol, tcp or unix
+      Addr: 127.0.0.1:6379                      # Redis server address, or unix socket path
+      Username:                                 # Redis username
+      Password:                                 # Redis password
+      DB: 0                                     # Redis DB
+      Timeout: 10                               # Timeout for redis request

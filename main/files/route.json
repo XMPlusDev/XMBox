@@ -1,0 +1,16 @@
+{
+  "rule_set": [
+    {
+      "tag": "geosite",
+      "type": "local",
+      "format": "binary",
+      "path": "/etc/XMBox/geosite.db"
+    },
+    {
+      "tag": "geoip",
+      "type": "local",
+      "format": "binary",
+      "path": "/etc/XMBox/geoip.db"
+    }
+  ]
+}
