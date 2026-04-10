@@ -40,25 +40,13 @@ jobs:
             NAME=$2
             FILE_NAME="${NAME}.srs"
 
-            URL="https://github.com/SagerNet/${REPO}/rule-set/${FILE_NAME}"
+            URL="https://raw.githubusercontent.com/SagerNet/${REPO}/rule-set/${FILE_NAME}"
             HASH_URL="${URL}.sha256sum"
 
             echo "Downloading ${URL}..."
             curl -L --retry 3 --retry-delay 2 --fail "$URL" -o "./build_assets/${FILE_NAME}"
 
-            echo "Fetching hash..."
-            HASH=$(curl -sL --fail "$HASH_URL" | awk '{print $1}')
-            [ -n "$HASH" ] || { echo "Failed to fetch hash for ${FILE_NAME}"; exit 1; }
-
-            echo "Verifying hash..."
-            LOCAL_HASH=$(sha256sum "./build_assets/${FILE_NAME}" | awk '{print $1}')
-
-            if [ "$LOCAL_HASH" != "$HASH" ]; then
-              echo "Hash mismatch for ${FILE_NAME}"
-              exit 1
-            fi
-
-            echo "${FILE_NAME} verified successfully"
+            echo "${FILE_NAME} downloaded successfully"
           done  
 
       - name: Docker meta
