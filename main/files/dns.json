@@ -1,20 +1,33 @@
 {
   "servers": [
-    { "tag": "cloudflare", "address": "https://1.1.1.1/dns-query" },
-    { "tag": "alibaba", "address": "223.5.5.5" },
-    { "tag": "block", "address": "rcode://success" }
+    {
+      "type": "udp",
+      "tag": "cloudflare",
+      "server": "1.1.1.1"
+    },
+    {
+      "type": "udp",
+      "tag": "alibaba",
+      "server": "223.5.5.5"
+    }
   ],
   "rules": [
     {
-      "rule_set": ["geosite:category-ads-all"],
-      "action": "route",
-      "server": "block"
+      "rule_set": "geosite-ads",
+      "action": "predefined",
+      "rcode": "REFUSED"
     },
     {
-      "rule_set": ["geosite:cn"],
+      "rule_set": "geosite-cn",
+      "action": "route",
+      "server": "alibaba"
+    },
+    {
+      "rule_set": "geoip-cn",
       "action": "route",
       "server": "alibaba"
     }
   ],
+  "strategy": "ipv4_only",
   "final": "cloudflare"
 }

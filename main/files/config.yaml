@@ -7,7 +7,7 @@ Log:
 Ntp:
     Enable: false
     Server: time.cloudflare.com
-    ServerPort: 53
+    ServerPort: 123
 Multiplex:                                
     Enabled: true                               # true, flase
     Padding: true                               # true, flase

@@ -60,6 +60,7 @@ func (i *Instance) load(config *Config) (*loadResult, error) {
 	logConfig := getDefaultLogConfig()
 	if config.LogConfig != nil {
 		if err := mergo.Merge(logConfig, config.LogConfig, mergo.WithOverride); err != nil {
+			log.Panic(err)
 			return nil, fmt.Errorf("merge log config: %w", err)
 		}
 	}
@@ -70,7 +71,7 @@ func (i *Instance) load(config *Config) (*loadResult, error) {
 		Output:    logConfig.Output,
 	}
 
-	if config.NtpConfig.Enable {
+	if config.NtpConfig != nil && config.NtpConfig.Enable {
 		opts.NTP = &option.NTPOptions{
 			Enabled:       true,
 			WriteToSystem: true,
@@ -84,10 +85,12 @@ func (i *Instance) load(config *Config) (*loadResult, error) {
 	if config.DnsConfig != "" {
 		dnsBytes, err := os.ReadFile(config.DnsConfig)
 		if err != nil {
+			log.Panic(err)
 			return nil, fmt.Errorf("read DNS file: %w", err)
 		}
 		var dnsOptions option.DNSOptions
 		if err := json.Unmarshal(dnsBytes, &dnsOptions); err != nil {
+			log.Panic(err)
 			return nil, fmt.Errorf("unmarshal DNS config: %w", err)
 		}
 		opts.DNS = &dnsOptions
@@ -100,6 +103,7 @@ func (i *Instance) load(config *Config) (*loadResult, error) {
 		}
 		var routeOptions option.RouteOptions
 		if err := json.Unmarshal(routeBytes, &routeOptions); err != nil {
+			log.Panic(err)
 			return nil, fmt.Errorf("unmarshal route config: %w", err)
 		}
 		opts.Route = &routeOptions
@@ -107,6 +111,7 @@ func (i *Instance) load(config *Config) (*loadResult, error) {
 
 	b, err := box.New(box.Options{Context: ctx, Options: opts})
 	if err != nil {
+		log.Panic(err)
 		return nil, fmt.Errorf("create sing-box instance: %w", err)
 	}
 
@@ -131,11 +136,13 @@ func (i *Instance) Start() error {
 
 	result, err := i.load(i.config)
 	if err != nil {
+		log.Panic(err)
 		return fmt.Errorf("load config: %w", err)
 	}
 
 	for _, s := range i.Service {
 		if err := s.Close(); err != nil {
+			log.Panic(err)
 			return fmt.Errorf("stop existing service: %w", err)
 		}
 	}
@@ -156,6 +163,7 @@ func (i *Instance) Start() error {
 		i.ctx = nil
 		i.dispatcher = nil
 		i.logFactory = nil
+		log.Panic(err)
 		return fmt.Errorf("start sing-box instance: %w", err)
 	}
 
@@ -168,6 +176,7 @@ func (i *Instance) Start() error {
 
 	for _, s := range i.Service {
 		if err := s.Start(); err != nil {
+			log.Panic(err)
 			return fmt.Errorf("start service: %w", err)
 		}
 	}
@@ -182,6 +191,7 @@ func (i *Instance) Stop() error {
 
 	for _, s := range i.Service {
 		if err := s.Close(); err != nil {
+			log.Panic(err)
 			return fmt.Errorf("stop service: %w", err)
 		}
 	}

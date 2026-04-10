@@ -60,6 +60,7 @@ func (c *Controller) Start() error {
 
 	newNodeInfo, err := c.client.GetNodeInfo()
 	if err != nil {
+		log.Panic(err)
 		return err
 	}
 	c.nodeInfo = newNodeInfo
@@ -67,6 +68,7 @@ func (c *Controller) Start() error {
 
 	subscriptionInfo, err := c.client.GetSubscriptionList()
 	if err != nil {
+		log.Panic(err)
 		return err
 	}
 	c.subscriptionList = subscriptionInfo
@@ -116,7 +118,7 @@ func (c *Controller) Start() error {
 		},
 	))
 
-	if c.nodeInfo.TlsSettings.Type == "tls" {
+	if c.nodeInfo.TlsSettings != nil && c.nodeInfo.TlsSettings.Type == "tls" {
 		c.taskManager.Add(task.NewWithInterval(
 			c.LogPrefix,
 			"cert renew",
@@ -139,14 +141,14 @@ func (c *Controller) certMonitor() error {
 	case "dns", "http", "tls":
 		lego, err := cert.New(c.config.CertConfig)
 		if err != nil {
-			log.Print(err)
+			log.Panic(err)
 			return err
 		}
 		if _, _, _, err = lego.RenewCert(
 			c.nodeInfo.TlsSettings.CertMode,
 			c.nodeInfo.TlsSettings.ServerName,
 		); err != nil {
-			log.Print(err)
+			log.Panic(err)
 			return err
 		}
 	}
@@ -177,7 +179,7 @@ func (c *Controller) nodeInfoMonitor() error {
 			nodeInfoChanged = false
 			newNodeInfo = c.nodeInfo
 		} else {
-			log.Print(err)
+			log.Panic(err)
 			return nil
 		}
 	}
@@ -189,7 +191,7 @@ func (c *Controller) nodeInfoMonitor() error {
 			subscriptionChanged = false
 			newSubscriptionInfo = c.subscriptionList
 		} else {
-			log.Print(err)
+			log.Panic(err)
 			return nil
 		}
 	}
@@ -202,21 +204,21 @@ func (c *Controller) nodeInfoMonitor() error {
 		c.Tag = c.buildNodeTag()
 
 		if err = c.nodeManager.RemoveNode(oldTag); err != nil {
-			log.Print(err)
+			log.Panic(err)
 		}
 		c.coreInstance.DeleteCounter(oldTag)
 		if err = limiter.DeleteLimiter(oldTag); err != nil {
-			log.Print(err)
+			log.Panic(err)
 		}
 
 		if err = c.nodeManager.AddNode(newNodeInfo, c.Tag, c.config); err != nil {
-			log.Print(err)
+			log.Panic(err)
 			c.nodeInfo, c.Tag = oldNodeInfo, oldTag
 			return nil
 		}
 
 		if err = c.subManager.AddSubscriptions(newSubscriptionInfo, newNodeInfo, c.Tag); err != nil {
-			log.Print(err)
+			log.Panic(err)
 			return nil
 		}
 
@@ -227,7 +229,7 @@ func (c *Controller) nodeInfoMonitor() error {
 			newSubscriptionInfo,
 			c.config.RedisConfig,
 		); err != nil {
-			log.Print(err)
+			log.Panic(err)
 			return nil
 		}
 

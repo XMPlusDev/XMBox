@@ -1,16 +1,22 @@
 {
   "rule_set": [
     {
-      "tag": "geosite",
-      "type": "local",
+      "tag": "geosite-ads",
+      "type": "remote",
       "format": "binary",
-      "path": "/etc/XMBox/geosite.db"
+      "url": "https://github.com/SagerNet/sing-geosite/releases/latest/download/geosite-category-ads-all.db"
     },
     {
-      "tag": "geoip",
-      "type": "local",
+      "tag": "geosite-cn",
+      "type": "remote",
       "format": "binary",
-      "path": "/etc/XMBox/geoip.db"
+      "url": "https://github.com/SagerNet/sing-geosite/releases/latest/download/geosite-cn.db"
+    },
+    {
+      "tag": "geoip-cn",
+      "type": "remote",
+      "format": "binary",
+      "url": "https://github.com/SagerNet/sing-geoip/releases/latest/download/geoip-cn.db"
     }
   ]
 }

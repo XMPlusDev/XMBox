@@ -13,8 +13,8 @@ bash <(curl -Ls https://raw.githubusercontent.com/XMPlusDev/XMBox/script/install
 
 ### /etc/XMBox/config.yaml
 ```
-DnsFile: /etc/XMBox/dns.json 
-RouteFile: /etc/XMBox/route.json 
+DnsFile: #/etc/XMBox/dns.json 
+RouteFile: #/etc/XMBox/route.json 
 Log:
   Level: info                                   # debug | info | warn | error
   Disabled: true                                # true, flase
@@ -22,7 +22,7 @@ Log:
 Ntp:
     Enable: false
     Server: time.cloudflare.com
-    ServerPort: 53
+    ServerPort: 123
 Multiplex:                                
     Enabled: true                               # true, flase
     Padding: true                               # true, flase
@@ -75,11 +75,11 @@ Nodes:
   "cipher": "aes-128-gcm",
   // hysteria
   "obfs_type": "salamander",
-  "obfs_password": "password"
+  "obfs_password": "password",
   "bbr_profile": "standard",
   "ignore_client_bandwidth": true,
   //tuic
-  "congestion_control": "bbr"
+  "congestion_control": "bbr",
   //anytls
   "padding_scheme": [],
   //shadowtls
@@ -111,11 +111,11 @@ Nodes:
   "cipher": "aes-128-gcm",
   // hysteria
   "obfs_type": "salamander",
-  "obfs_password": "password"
+  "obfs_password": "password",
   "bbr_profile": "standard",
   "ignore_client_bandwidth": true,
   //tuic
-  "congestion_control": "bbr"
+  "congestion_control": "bbr",
   //anytls
   "padding_scheme": [],
   //shadowtls
@@ -143,11 +143,11 @@ Nodes:
   "cipher": "aes-128-gcm",
   // hysteria
   "obfs_type": "salamander",
-  "obfs_password": "password"
+  "obfs_password": "password",
   "bbr_profile": "standard",
   "ignore_client_bandwidth": true,
   //tuic
-  "congestion_control": "bbr"
+  "congestion_control": "bbr",
   //anytls
   "padding_scheme": [],
   //shadowtls
@@ -175,11 +175,11 @@ Nodes:
   "cipher": "aes-128-gcm",
   // hysteria
   "obfs_type": "salamander",
-  "obfs_password": "password"
+  "obfs_password": "password",
   "bbr_profile": "standard",
   "ignore_client_bandwidth": true,
   //tuic
-  "congestion_control": "bbr"
+  "congestion_control": "bbr",
   //anytls
   "padding_scheme": [],
   //shadowtls
@@ -208,11 +208,11 @@ Nodes:
   "cipher": "aes-128-gcm",
   // hysteria
   "obfs_type": "salamander",
-  "obfs_password": "password"
+  "obfs_password": "password",
   "bbr_profile": "standard",
   "ignore_client_bandwidth": true,
   //tuic
-  "congestion_control": "bbr"
+  "congestion_control": "bbr",
   //anytls
   "padding_scheme": [],
   //shadowtls
@@ -228,28 +228,31 @@ Nodes:
 ```
 {
   "tlsSettings": {
-    "enabled: true,
+    "enabled": true,
     "insecure": false,
-    "alpn": ["h2", "http/1.1"],
+    "alpn": [
+      "h2",
+      "http/1.1"
+    ],
     "cert_mode": "http",
     "server_name": "google.com",
-	"fragment": false,
-	"record_fragment": false,
+    "fragment": false,
+    "record_fragment": false,
     "ech": {
-	  "enabled: false,
-	  "key" [],
-	  "config": [],
-	  "query_server_name": ""
-	},
-	"reality": {
-	  "enabled: false,
-	  "short_ids": [],
-	  "private_key": "",
-	  "public_key": "",
-	  "server_name": "www.microsoft.com",
-	  "server_port" "443"
-	}
-  },
+      "enabled": false,
+      "key": [],
+      "config": [],
+      "query_server_name": ""
+    },
+    "reality": {
+      "enabled": false,
+      "short_ids": [],
+      "private_key": "",
+      "public_key": "",
+      "server_name": "www.microsoft.com",
+      "server_port": "443"
+    }
+  }
 }
 ```
 

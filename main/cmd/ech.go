@@ -29,10 +29,10 @@ Examples:
 )
 
 func init() {
-	echCmd.Flags().StringVar(&echServerName, "serverName", "cloudflare-ech.com", "Server name for ECH config")
-	echCmd.PersistentFlags().StringVarP(&echOutputConfig, "config-output", "c", "", "Write ECH config PEM to file instead of stdout")
-	echCmd.PersistentFlags().StringVarP(&echOutputKey, "key-output", "k", "", "Write ECH key PEM to file instead of stdout")
-	rootCmd.AddCommand(echCmd)
+    echCmd.Flags().StringVar(&echServerName, "serverName", "cloudflare-ech.com", "Server name for ECH config")
+    echCmd.Flags().StringVarP(&echOutputConfig, "config-output", "c", "", "Write ECH config PEM to file instead of stdout")
+    echCmd.Flags().StringVarP(&echOutputKey, "key-output", "k", "", "Write ECH key PEM to file instead of stdout")
+    rootCmd.AddCommand(echCmd)
 }
 
 func executeECH() error {
