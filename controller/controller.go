@@ -51,6 +51,7 @@ type Controller struct {
 
 func New(coreInstance *core.Instance, api api.API, config *node.Config) *Controller {
 	return &Controller{
+		coreInstance: coreInstance,
 		config:      config,
 		client:      api,
 		taskManager: task.NewManager(),
@@ -123,7 +124,7 @@ func (c *Controller) Start() error {
 	))
 
 	if c.nodeInfo.TlsSettings != nil && c.nodeInfo.TlsSettings.Type == "tls" {
-		c.taskManager.Add(task.NewWithInterval(
+		c.taskManager.Add(task.NewWithDelay(
 			c.LogPrefix,
 			"cert renew",
 			time.Duration(c.nodeInfo.UpdateInterval)*time.Second*60,
@@ -141,22 +142,22 @@ func (c *Controller) Close() error {
 }
 
 func (c *Controller) certMonitor() error {
-	switch c.nodeInfo.TlsSettings.CertMode {
-	case "dns", "http", "tls":
-		lego, err := cert.New(c.config.CertConfig)
-		if err != nil {
-			log.Panic(err)
-			return err
-		}
-		if _, _, _, err = lego.RenewCert(
-			c.nodeInfo.TlsSettings.CertMode,
-			c.nodeInfo.TlsSettings.ServerName,
-		); err != nil {
-			log.Panic(err)
-			return err
-		}
-	}
-	return nil
+    switch c.nodeInfo.TlsSettings.CertMode {
+    case "dns", "http", "tls":
+        lego, err := cert.New(c.config.CertConfig)
+        if err != nil {
+            log.Printf("%s cert init failed: %v", c.LogPrefix, err)
+            return err
+        }
+        if _, _, _, err = lego.RenewCert(
+            c.nodeInfo.TlsSettings.CertMode,
+            c.nodeInfo.TlsSettings.ServerName,
+        ); err != nil {
+            log.Printf("%s cert renew failed: %v", c.LogPrefix, err)
+            return err
+        }
+    }
+    return nil
 }
 
 func (c *Controller) logPrefix() string {
@@ -206,6 +207,15 @@ func (c *Controller) nodeInfoMonitor() error {
 
 		c.nodeInfo = newNodeInfo
 		c.Tag = c.buildNodeTag()
+		
+		if ruleList, err := c.client.GetNodeRule(); err != nil {
+			log.Printf("%s Failed to get rule list: %s", c.LogPrefix, err)
+		} else if len(*ruleList) > 0 {
+			log.Printf("%s Updating %d node rules", c.LogPrefix, len(*ruleList))
+			if err := rule.UpdateRule(c.Tag, *ruleList); err != nil {
+				log.Printf("%s Failed to update rules: %s", c.LogPrefix, err)
+			}
+		}
 
 		if err = c.nodeManager.RemoveNode(oldTag); err != nil {
 			log.Printf("%s Failed to remove node: %v", c.LogPrefix, err)
@@ -237,14 +247,6 @@ func (c *Controller) nodeInfoMonitor() error {
 		); err != nil {
 			log.Panic(err)
 			return nil
-		}
-
-		if ruleList, err := c.client.GetNodeRule(); err != nil {
-			log.Printf("%s Failed to get rule list: %s", c.LogPrefix, err)
-		} else if len(*ruleList) > 0 {
-			if err := rule.UpdateRule(c.Tag, *ruleList); err != nil {
-				log.Printf("%s Failed to update rules: %s", c.LogPrefix, err)
-			}
 		}
 
 	} else if subscriptionChanged {

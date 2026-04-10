@@ -35,6 +35,19 @@ func NewWithInterval(logTag string, tag string, interval time.Duration, execute 
 	}
 }
 
+func NewWithDelay(logTag string, tag string, interval time.Duration, execute func() error) *PeriodicTask {
+	return &PeriodicTask{
+		LogTag: logTag,
+		Tag:    tag,
+		Periodic: &Periodic{
+			Interval: interval,
+			Execute:  execute,
+			delay:    true,
+		},
+		running: false,
+	}
+}
+
 func (pt *PeriodicTask) Start() error {
 	pt.mu.Lock()
 	defer pt.mu.Unlock()

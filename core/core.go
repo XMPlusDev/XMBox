@@ -167,8 +167,6 @@ func (i *Instance) Start() error {
 		return fmt.Errorf("start sing-box instance: %w", err)
 	}
 
-	log.Println("Core successfully started")
-
 	for _, nodeConfig := range i.config.NodesConfig {
 		svc := globalFactory(i, nodeConfig)
 		i.Service = append(i.Service, svc)
@@ -181,7 +179,6 @@ func (i *Instance) Start() error {
 		}
 	}
 
-	log.Println("XMBox successfully started")
 	return nil
 }
 

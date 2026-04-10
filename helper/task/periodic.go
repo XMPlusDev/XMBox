@@ -8,7 +8,7 @@ import (
 type Periodic struct {
 	Interval time.Duration
 	Execute func() error
-
+	delay    bool 
 	access  sync.Mutex
 	timer   *time.Timer
 	running bool
@@ -54,15 +54,22 @@ func (t *Periodic) Start() error {
 		return nil
 	}
 	t.running = true
-	t.access.Unlock()
 
+	if t.delay {
+		t.timer = time.AfterFunc(t.Interval, func() {
+			t.checkedExecute()
+		})
+		t.access.Unlock()
+		return nil
+	}
+
+	t.access.Unlock()
 	if err := t.checkedExecute(); err != nil {
 		t.access.Lock()
 		t.running = false
 		t.access.Unlock()
 		return err
 	}
-
 	return nil
 }
 

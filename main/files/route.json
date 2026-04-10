@@ -1,22 +1,24 @@
 {
-  "rule_set": [
-    {
-      "tag": "geosite-ads",
-      "type": "remote",
-      "format": "binary",
-      "url": "https://github.com/SagerNet/sing-geosite/releases/latest/download/geosite-category-ads-all.db"
-    },
-    {
-      "tag": "geosite-cn",
-      "type": "remote",
-      "format": "binary",
-      "url": "https://github.com/SagerNet/sing-geosite/releases/latest/download/geosite-cn.db"
-    },
-    {
-      "tag": "geoip-cn",
-      "type": "remote",
-      "format": "binary",
-      "url": "https://github.com/SagerNet/sing-geoip/releases/latest/download/geoip-cn.db"
-    }
-  ]
+  "route": {
+    "rule_set": [
+      {
+        "tag": "geosite-ads",
+        "type": "local",
+        "format": "binary",
+        "path": "/etc/XMBox/geosite-category-ads-all.srs"
+      },
+      {
+        "tag": "geosite-cn",
+        "type": "local",
+        "format": "binary",
+        "path": "/etc/XMBox/geosite-cn.srs"
+      },
+      {
+        "tag": "geoip-cn",
+        "type": "local",
+        "format": "binary",
+        "path": "/etc/XMBox/geoip-cn.srs"
+      }
+    ]
+  }
 }

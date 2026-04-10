@@ -90,15 +90,15 @@ jobs:
           cp ${GITHUB_WORKSPACE}/main/files/dns.json    ./build_assets/dns.json
           cp ${GITHUB_WORKSPACE}/main/files/route.json  ./build_assets/route.json
 
-          LIST=('sing-geoip geoip' 'sing-geosite geosite')
+          LIST=('sing-geoip geoip-cn' 'sing-geosite geosite-cn' 'sing-geosite geosite-category-ads-all')
 
           for i in "${LIST[@]}"; do
             set -- $i
             REPO=$1
             NAME=$2
-            FILE_NAME="${NAME}.db"
+            FILE_NAME="${NAME}.srs"
 
-            URL="https://github.com/SagerNet/${REPO}/releases/latest/download/${FILE_NAME}"
+            URL="https://raw.githubusercontent.com/SagerNet/${REPO}/rule-set/${FILE_NAME}"
             HASH_URL="${URL}.sha256sum"
 
             echo "Downloading ${URL}..."

@@ -32,15 +32,15 @@ jobs:
         run: |
           set -e
           mkdir -p ./build_assets
-          LIST=('sing-geoip geoip' 'sing-geosite geosite')
+          LIST=('sing-geoip geoip-cn' 'sing-geosite geosite-cn' 'sing-geosite geosite-category-ads-all')
 
           for i in "${LIST[@]}"; do
             set -- $i
             REPO=$1
             NAME=$2
-            FILE_NAME="${NAME}.db"
+            FILE_NAME="${NAME}.srs"
 
-            URL="https://github.com/SagerNet/${REPO}/releases/latest/download/${FILE_NAME}"
+            URL="https://github.com/SagerNet/${REPO}/rule-set/${FILE_NAME}"
             HASH_URL="${URL}.sha256sum"
 
             echo "Downloading ${URL}..."
