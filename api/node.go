@@ -248,59 +248,61 @@ func (c *Client) parseNetworkSettings(networkData *simplejson.Json, nodeInfo *No
 
 func (c *Client) parseSecuritySettings(securityData *simplejson.Json, nodeInfo *NodeInfo) error {
 	nodeInfo.TlsSettings = &TlsSettings{CertMode: "none"}
-	
 	nodeInfo.TlsSettings.Type = ""
-	if tlsEnabled, ok := securityData.CheckGet("enabled"); ok {
-		nodeInfo.TlsSettings.Enabled = tlsEnabled.MustBool()
-		if nodeInfo.TlsSettings.Enabled {
+	
+	if tlsSettings, ok := securityData.CheckGet("tlsSettings"); ok {
+		if tlsEnabled, ok := tlsSettings.CheckGet("enabled"); ok {
+			nodeInfo.TlsSettings.Enabled = tlsEnabled.MustBool()
+			if nodeInfo.TlsSettings.Enabled {
 				nodeInfo.TlsSettings.Type = "tls"
-		}
-	}	
-	if certMode, ok := securityData.CheckGet("cert_mode"); ok {
-		nodeInfo.TlsSettings.CertMode = certMode.MustString()
-	}
-	//tls
-	tlsServerName, ok := securityData.CheckGet("server_name")
-	if !ok {
-		if nodeInfo.TlsSettings.Enabled {
-			return fmt.Errorf("Invalid tls server name.")
-		}
-		// TLS disabled and no server_name — skip, leave ServerName empty
-	} else {
-		nodeInfo.TlsSettings.ServerName = tlsServerName.MustString()
-	}
-		
-	if alpnArray, err := securityData.Get("alpn").StringArray(); err == nil {
-		nodeInfo.TlsSettings.Alpn = alpnArray
-	}
-	//tlsECH
-	if tlsECH, ok := securityData.CheckGet("ech"); ok {
-		if echEnabled, ok := tlsECH.CheckGet("enabled"); ok {
-			nodeInfo.TlsSettings.EnabledECH = echEnabled.MustBool()
-		}
-		if echArray, err := tlsECH.Get("key").StringArray(); err == nil {
-			nodeInfo.TlsSettings.ECHKey = echArray
-		}
-	}
-	// reality
-	if tlsReality, ok := securityData.CheckGet("reality"); ok {
-		if realityEnabled, ok := tlsReality.CheckGet("enabled"); ok {
-			nodeInfo.TlsSettings.RealityEnabled = realityEnabled.MustBool()
-			if nodeInfo.TlsSettings.RealityEnabled {
-				nodeInfo.TlsSettings.Type = "reality"
 			}
 		}
-		if shortIdsArray, err := tlsReality.Get("short_ids").StringArray(); err == nil {
-			nodeInfo.TlsSettings.RealityShortID = shortIdsArray
+		if certMode, ok := tlsSettings.CheckGet("cert_mode"); ok {
+			nodeInfo.TlsSettings.CertMode = certMode.MustString()
 		}
-		if privateKey, err := tlsReality.Get("private_key").String(); err == nil {
-			nodeInfo.TlsSettings.RealityPrivateKey = privateKey
+		//tls
+		tlsServerName, ok := tlsSettings.CheckGet("server_name")
+		if !ok {
+			if nodeInfo.TlsSettings.Enabled {
+				return fmt.Errorf("Invalid tls server name.")
+			}
+			// TLS disabled and no server_name — skip, leave ServerName empty
+		} else {
+			nodeInfo.TlsSettings.ServerName = tlsServerName.MustString()
 		}
-		if serverName, ok := tlsReality.CheckGet("server_name"); ok {
-			nodeInfo.TlsSettings.RealityServerName = serverName.MustString()
+			
+		if alpnArray, err := tlsSettings.Get("alpn").StringArray(); err == nil {
+			nodeInfo.TlsSettings.Alpn = alpnArray
 		}
-		if serverPort, ok := tlsReality.CheckGet("server_port"); ok {
-			nodeInfo.TlsSettings.RealityServerPort = uint16(serverPort.MustInt())
+		//tlsECH
+		if tlsECH, ok := tlsSettings.CheckGet("ech"); ok {
+			if echEnabled, ok := tlsECH.CheckGet("enabled"); ok {
+				nodeInfo.TlsSettings.EnabledECH = echEnabled.MustBool()
+			}
+			if echArray, err := tlsECH.Get("key").StringArray(); err == nil {
+				nodeInfo.TlsSettings.ECHKey = echArray
+			}
+		}
+		// reality
+		if tlsReality, ok := tlsSettings.CheckGet("reality"); ok {
+			if realityEnabled, ok := tlsReality.CheckGet("enabled"); ok {
+				nodeInfo.TlsSettings.RealityEnabled = realityEnabled.MustBool()
+				if nodeInfo.TlsSettings.RealityEnabled {
+					nodeInfo.TlsSettings.Type = "reality"
+				}
+			}
+			if shortIdsArray, err := tlsReality.Get("short_ids").StringArray(); err == nil {
+				nodeInfo.TlsSettings.RealityShortID = shortIdsArray
+			}
+			if privateKey, err := tlsReality.Get("private_key").String(); err == nil {
+				nodeInfo.TlsSettings.RealityPrivateKey = privateKey
+			}
+			if serverName, ok := tlsReality.CheckGet("server_name"); ok {
+				nodeInfo.TlsSettings.RealityServerName = serverName.MustString()
+			}
+			if serverPort, ok := tlsReality.CheckGet("server_port"); ok {
+				nodeInfo.TlsSettings.RealityServerPort = uint16(serverPort.MustInt())
+			}
 		}
 	}
 	

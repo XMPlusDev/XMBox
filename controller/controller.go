@@ -24,11 +24,15 @@ func getDefaultControllerConfig() *node.Config {
 var _ service.ControllerInterface = (*Controller)(nil)
 
 func init() {
-    core.SetControllerFactory(func(instance *core.Instance, nodeConfig *core.NodesConfig) service.ControllerInterface {
-        apiClient := api.New(nodeConfig.ApiConfig)
-        cfg := getDefaultControllerConfig()
-        return New(instance, apiClient, cfg)
-    })
+	core.SetControllerFactory(func(instance *core.Instance, nodeConfig *core.NodesConfig) service.ControllerInterface {
+		apiClient := api.New(nodeConfig.ApiConfig)
+		cfg := getDefaultControllerConfig()
+		if nodeConfig != nil {
+			cfg.CertConfig = nodeConfig.CertConfig
+			cfg.RedisConfig = nodeConfig.RedisConfig
+		}
+		return New(instance, apiClient, cfg)
+	})
 }
 
 type Controller struct {

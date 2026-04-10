@@ -30,7 +30,7 @@ Examples:
 
 func init() {
     echCmd.Flags().StringVar(&echServerName, "serverName", "cloudflare-ech.com", "Server name for ECH config")
-    echCmd.Flags().StringVarP(&echOutputConfig, "config-output", "c", "", "Write ECH config PEM to file instead of stdout")
+    echCmd.Flags().StringVarP(&echOutputConfig, "config-output", "o", "", "Write ECH config PEM to file instead of stdout")
     echCmd.Flags().StringVarP(&echOutputKey, "key-output", "k", "", "Write ECH key PEM to file instead of stdout")
     rootCmd.AddCommand(echCmd)
 }
@@ -45,18 +45,18 @@ func executeECH() error {
 		if err := os.WriteFile(echOutputConfig, []byte(configPem), 0o644); err != nil {
 			return fmt.Errorf("writing ECH config to %s: %w", echOutputConfig, err)
 		}
-		fmt.Printf("ECH config written to: %s\n", echOutputConfig)
+		fmt.Printf("ECH config written to: %s\n\n", echOutputConfig)
 	} else {
-		os.Stdout.WriteString(configPem)
+		fmt.Printf("ECH config:\n%s\n\n", configPem)
 	}
 
 	if echOutputKey != "" {
 		if err := os.WriteFile(echOutputKey, []byte(keyPem), 0o600); err != nil {
 			return fmt.Errorf("writing ECH key to %s: %w", echOutputKey, err)
 		}
-		fmt.Printf("ECH key written to: %s\n", echOutputKey)
+		fmt.Printf("ECH key written to: %s\n\n", echOutputKey)
 	} else {
-		os.Stdout.WriteString(keyPem)
+		fmt.Printf("ECH key:\n%s\n\n", keyPem)
 	}
 
 	return nil

@@ -33,19 +33,19 @@ func getInboundOptions(tag string, nodeInfo *api.NodeInfo, config *Config) (opti
 			Padding: config.Multiplex.Padding,
 		}
 	}
-
+	
 	// TLS
 	var tls option.InboundTLSOptions
 	switch nodeInfo.TlsSettings.Type {
 	case "tls":
 		tls.Enabled = nodeInfo.TlsSettings.Enabled
 		tls.ALPN = badoption.Listable[string](nodeInfo.TlsSettings.Alpn)
-		certFile, keyFile, err := getCertFile(config.CertConfig, nodeInfo.TlsSettings.CertMode, nodeInfo.TlsSettings.ServerName)
-		if err != nil {
-			return option.Inbound{}, err
-		}
-		
-		if config.CertConfig != nil {
+		if config.CertConfig != nil && nodeInfo.TlsSettings.CertMode != "none" {
+			certFile, keyFile, err := getCertFile(config.CertConfig, nodeInfo.TlsSettings.CertMode, nodeInfo.TlsSettings.ServerName)
+			if err != nil {
+				return option.Inbound{}, err
+			}
+			
 			switch nodeInfo.TlsSettings.CertMode {
 			case "none", "":
 			default:
@@ -53,10 +53,11 @@ func getInboundOptions(tag string, nodeInfo *api.NodeInfo, config *Config) (opti
 				tls.KeyPath = keyFile
 			}
 		}
-		
-		tls.ECH = &option.InboundECHOptions{
-			Enabled: nodeInfo.TlsSettings.EnabledECH,
-			Key:   nodeInfo.TlsSettings.ECHKey,  
+		if len(nodeInfo.TlsSettings.ECHKey) > 0 {
+			tls.ECH = &option.InboundECHOptions{
+				Enabled: nodeInfo.TlsSettings.EnabledECH,
+				Key:   nodeInfo.TlsSettings.ECHKey,  
+			}
 		}
 	case "reality":
 		tls.Enabled = nodeInfo.TlsSettings.RealityEnabled

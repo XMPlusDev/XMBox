@@ -2,6 +2,8 @@ package core
 
 import (
 	"github.com/xmplusdev/xmbox/api"
+	"github.com/xmplusdev/xmbox/helper/cert"
+	"github.com/xmplusdev/xmbox/helper/limiter"
 )
 
 type Config struct {
@@ -13,7 +15,9 @@ type Config struct {
 }
 
 type NodesConfig struct {
-	ApiConfig        *api.Config    `mapstructure:"ApiConfig"`
+	ApiConfig        *api.Config          `mapstructure:"ApiConfig"`
+	CertConfig       *cert.CertConfig     `mapstructure:"CertConfig"`
+	RedisConfig      *limiter.RedisConfig `mapstructure:"RedisConfig"`
 }
 
 type LogConfig struct {
