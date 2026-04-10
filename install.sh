@@ -173,9 +173,9 @@ install_XMBox() {
 	
     echo -e "${green}XMBox ${last_version}${plain} The installation is complete，XMBox has restarted"
 	
-    cp geoip.dat /etc/XMBox/
+    cp geoip.db /etc/XMBox/
 	
-    cp geosite.dat /etc/XMBox/ 
+    cp geosite.db /etc/XMBox/ 
 	
     if [[ ! -f /etc/XMBox/dns.json ]]; then
 		cp dns.json /etc/XMBox/
@@ -185,7 +185,7 @@ install_XMBox() {
 	fi
 	
     if [[ ! -f /etc/XMBox/config.yaml ]]; then
-        cp config.yml /etc/XMBox/
+        cp config.yaml /etc/XMBox/
     else
 		if [ -e "/etc/systemd/system/" ] ; then
 			systemctl start XMBox
