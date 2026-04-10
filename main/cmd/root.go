@@ -10,6 +10,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"runtime/debug"
 
 	"github.com/fsnotify/fsnotify"
 	log "github.com/sirupsen/logrus"
@@ -159,13 +160,11 @@ func startManagerSafely(i *core.Instance) (err error) {
 	if i == nil {
 		return fmt.Errorf("instance is nil")
 	}
-
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("panic during instance start: %v", r)
+			err = fmt.Errorf("panic during instance start: %v\n%s", r, debug.Stack())
 		}
 	}()
-
 	return i.Start()
 }
 

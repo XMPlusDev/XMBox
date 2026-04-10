@@ -104,9 +104,19 @@ func (c *Client) parseNetworkSettings(networkData *simplejson.Json, nodeInfo *No
 	if ipExist {
 		nodeInfo.ListenAddr = networkIP.MustString()
 	}
+	
 	networkPort, portExist := networkData.CheckGet("listen_port")
 	if portExist {
-		nodeInfo.ListenPort = uint16(networkPort.MustInt())
+		// Try int first, fall back to string
+		if port, err := networkPort.Int(); err == nil {
+			nodeInfo.ListenPort = uint16(port)
+		} else if portStr, err := networkPort.String(); err == nil {
+			if port, err := strconv.Atoi(portStr); err == nil {
+				nodeInfo.ListenPort = uint16(port)
+			}
+		}
+	}else{
+		return fmt.Errorf("listening port is required")
 	}
 	networkTCPFastOpen, fastOpenExist := networkData.CheckGet("tcp_fast_open")
 	if fastOpenExist {
@@ -250,13 +260,15 @@ func (c *Client) parseSecuritySettings(securityData *simplejson.Json, nodeInfo *
 		nodeInfo.TlsSettings.CertMode = certMode.MustString()
 	}
 	//tls
-	tlsServerName, ok := securityData.CheckGet("server_name"); 
+	tlsServerName, ok := securityData.CheckGet("server_name")
 	if !ok {
 		if nodeInfo.TlsSettings.Enabled {
 			return fmt.Errorf("Invalid tls server name.")
 		}
+		// TLS disabled and no server_name — skip, leave ServerName empty
+	} else {
+		nodeInfo.TlsSettings.ServerName = tlsServerName.MustString()
 	}
-	nodeInfo.TlsSettings.ServerName = tlsServerName.MustString()
 		
 	if alpnArray, err := securityData.Get("alpn").StringArray(); err == nil {
 		nodeInfo.TlsSettings.Alpn = alpnArray
