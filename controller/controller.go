@@ -176,7 +176,7 @@ func (c *Controller) buildNodeTag() string {
 func (c *Controller) nodeInfoMonitor() error {
 	var err error
 
-	nodeInfoChanged := true
+	var nodeInfoChanged = true
 	newNodeInfo, err := c.client.GetNodeInfo()
 	if err != nil {
 		if err.Error() == api.NodeNotModified {
@@ -188,7 +188,7 @@ func (c *Controller) nodeInfoMonitor() error {
 		}
 	}
 
-	subscriptionChanged := true
+	var subscriptionChanged = true
 	newSubscriptionInfo, err := c.client.GetSubscriptionList()
 	if err != nil {
 		if err.Error() == api.SubscriptionNotModified {
@@ -208,7 +208,9 @@ func (c *Controller) nodeInfoMonitor() error {
 		c.Tag = c.buildNodeTag()
 
 		if err = c.nodeManager.RemoveNode(oldTag); err != nil {
-			log.Panic(err)
+			log.Printf("%s Failed to remove node: %v", c.LogPrefix, err)
+			c.nodeInfo, c.Tag = oldNodeInfo, oldTag 
+			return err
 		}
 		c.coreInstance.DeleteCounter(oldTag)
 		if err = limiter.DeleteLimiter(oldTag); err != nil {

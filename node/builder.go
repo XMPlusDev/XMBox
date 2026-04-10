@@ -60,14 +60,14 @@ func getInboundOptions(tag string, nodeInfo *api.NodeInfo, config *Config) (opti
 			}
 		}
 	case "reality":
-		tls.Enabled = nodeInfo.TlsSettings.RealityEnabled
+		tls.Enabled = nodeInfo.TlsSettings.Enabled
 		tls.ServerName = nodeInfo.TlsSettings.ServerName
 		dest := nodeInfo.TlsSettings.RealityServerName
 		if dest == "" {
 			dest = tls.ServerName
 		}
 		tls.Reality = &option.InboundRealityOptions{
-			Enabled:    true,
+			Enabled:    nodeInfo.TlsSettings.RealityEnabled,
 			ShortID:    badoption.Listable[string](nodeInfo.TlsSettings.RealityShortID),
 			PrivateKey: nodeInfo.TlsSettings.RealityPrivateKey,
 			Handshake: option.InboundRealityHandshakeOptions{

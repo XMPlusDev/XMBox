@@ -216,9 +216,10 @@ func (i *Instance) GetInbound(tag string) (adapter.Inbound, bool) {
 }
 
 func (i *Instance) DeleteCounter(tag string) {
-	if i.dispatcher != nil {
-		i.dispatcher.DeleteCounter(tag)
-	}
+    if i.dispatcher == nil {
+        return
+    }
+    i.dispatcher.DeleteCounter(tag)
 }
 
 type ControllerFactory func(instance *Instance, nodeConfig *NodesConfig) service.ControllerInterface

@@ -300,8 +300,19 @@ func (c *Client) parseSecuritySettings(securityData *simplejson.Json, nodeInfo *
 			if serverName, ok := tlsReality.CheckGet("server_name"); ok {
 				nodeInfo.TlsSettings.RealityServerName = serverName.MustString()
 			}
-			if serverPort, ok := tlsReality.CheckGet("server_port"); ok {
-				nodeInfo.TlsSettings.RealityServerPort = uint16(serverPort.MustInt())
+			serverPort, ok := tlsReality.CheckGet("server_port")
+			if ok {
+				if port, err := serverPort.Int(); err == nil {
+					nodeInfo.TlsSettings.RealityServerPort = uint16(port)
+				} else if portStr, err := serverPort.String(); err == nil {
+					if port, err := strconv.Atoi(portStr); err == nil {
+						nodeInfo.TlsSettings.RealityServerPort = uint16(port)
+					}
+				}
+			}else{
+				if nodeInfo.TlsSettings.RealityEnabled && nodeInfo.TlsSettings.RealityServerPort < 1 {
+				   return fmt.Errorf("reality server port is required")
+				}
 			}
 		}
 	}
