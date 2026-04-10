@@ -28,7 +28,8 @@ type PostData struct {
 }
 
 type serverConfig struct {
-	server  `json:"server"`
+	server                                  `json:"server"`
+	UpdateInterval   	int 				`json:"update_interval"`
 }
 
 type server struct {
@@ -39,7 +40,6 @@ type server struct {
 	IP                  string   			`json:"ip"`
 	NetworkSettings     *json.RawMessage 	`json:"transportSettings"`
 	SecuritySettings    *json.RawMessage 	`json:"securitySettings"`
-	UpdateInterval   	int 				`json:"update_interval"`
 	RulesSettings       []rule              `json:"rules"`
 }
 
