@@ -173,9 +173,9 @@ install_XMBox() {
 	
     echo -e "${green}XMBox ${last_version}${plain} The installation is complete，XMBox has restarted"
 	
-    cp geoip.db /etc/XMBox/
-	
-    cp geosite.db /etc/XMBox/ 
+    cp geosite-category-ads-all.srs /etc/XMBox/
+	cp geosite-cn.srs /etc/XMBox/ 
+    cp geoip-cn.srs /etc/XMBox/ 
 	
     if [[ ! -f /etc/XMBox/dns.json ]]; then
 		cp dns.json /etc/XMBox/
