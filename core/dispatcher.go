@@ -53,7 +53,7 @@ func (d *Dispatcher) RoutedConnection(
 	bucket, isSpeedlimited, reject, email := l.CheckLimiter(m.Inbound, m.User, ip)
 	if reject {
 		conn.Close()
-		logger.Printf(fmt.Sprintf("[%s]: IP limit exceeded for user %s. (TCP) connection from %s closed", m.Inbound, email, maskIP(ip, 2)))
+		logger.Printf(fmt.Sprintf("[%s]: IP limit exceeded for [%s]. (TCP) connection from %s closed", m.Inbound, email, maskIP(ip, 2)))
 		return newDeadConn(conn)
 	}
 	if bucket != nil && isSpeedlimited {
@@ -106,7 +106,7 @@ func (d *Dispatcher) RoutedPacketConnection(
 	bucket, isSpeedlimited, reject, email := l.CheckLimiter(m.Inbound, m.User, ip)
 	if reject {
 		conn.Close()
-		logger.Printf(fmt.Sprintf("[%s]: IP limit exceeded for user %s. (UDP) connection from %s closed", m.Inbound, email, maskIP(ip, 2)))
+		logger.Printf(fmt.Sprintf("[%s]: IP limit exceeded for[%s]. (UDP) connection from %s closed", m.Inbound, email, maskIP(ip, 2)))
 		return newDeadPacketConn(conn)
 	}
 
