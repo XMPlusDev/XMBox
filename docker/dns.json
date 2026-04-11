@@ -1,22 +1,72 @@
 {
   "dns": {
     "servers": [
-      { "tag": "cloudflare", "address": "https://1.1.1.1/dns-query" },
-      { "tag": "alibaba", "address": "223.5.5.5" },
-      { "tag": "block", "address": "rcode://success" }
+      {
+        "type": "https",
+        "tag": "remote_dns",
+        "server": "cloudflare-dns.com",
+        "server_name": "cloudflare-dns.com",
+        "domain_resolver": "hosts_dns",
+        "path": "/dns-query",
+        "detour": "proxy"
+      },
+      {
+        "type": "https",
+        "tag": "direct_dns",
+        "server": "dns.alidns.com",
+        "server_name": "dns.alidns.com",
+        "domain_resolver": "hosts_dns",
+        "path": "/dns-query"
+      },
+      {
+        "type": "hosts",
+        "tag": "hosts_dns",
+        "predefined": {
+          "dns.google": [
+            "8.8.8.8",
+            "8.8.4.4",
+            "2001:4860:4860::8888",
+            "2001:4860:4860::8844"
+          ],
+          "dns.alidns.com": [
+            "223.5.5.5",
+            "223.6.6.6",
+            "2400:3200::1",
+            "2400:3200:baba::1"
+          ],
+          "one.one.one.one": [
+            "1.1.1.1",
+            "1.0.0.1",
+            "2606:4700:4700::1111",
+            "2606:4700:4700::1001"
+          ],
+          "cloudflare-dns.com": [
+            "104.16.249.249",
+            "104.16.248.249",
+            "2606:4700::6810:f8f9",
+            "2606:4700::6810:f9f9"
+          ]
+        }
+      }
     ],
     "rules": [
       {
-        "rule_set": ["geosite:category-ads-all"],
-        "action": "route",
-        "server": "block"
+        "rule_set": "geosite-ads",
+        "action": "predefined",
+        "rcode": "REFUSED"
       },
       {
-        "rule_set": ["geosite:cn"],
+        "rule_set": "geosite-cn",
         "action": "route",
-        "server": "alibaba"
+        "server": "direct_dns"
+      },
+      {
+        "rule_set": "geosite-cn",
+        "action": "route",
+        "server": "direct_dns"
       }
     ],
-    "final": "cloudflare"
+    "strategy": "ipv4_only",
+    "final": "remote_dns"
   }
 }

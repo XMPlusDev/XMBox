@@ -2,22 +2,23 @@
   "route": {
     "rule_set": [
       {
-        "tag": "geosite",
+        "tag": "geosite-ads",
         "type": "local",
         "format": "binary",
-        "path": "/etc/XMBox/geosite.db"
+        "path": "/etc/XMBox/geosite-category-ads-all.srs"
       },
       {
-        "tag": "geoip",
+        "tag": "geosite-cn",
         "type": "local",
         "format": "binary",
-        "path": "/etc/XMBox/geoip.db"
+        "path": "/etc/XMBox/geosite-cn.srs"
+      },
+      {
+        "tag": "geoip-cn",
+        "type": "local",
+        "format": "binary",
+        "path": "/etc/XMBox/geoip-cn.srs"
       }
     ]
-  },
-  "experimental": {
-    "cache_file": {
-      "enabled": true
-    }
   }
 }
