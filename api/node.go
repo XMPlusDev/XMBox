@@ -297,10 +297,10 @@ func (c *Client) parseSecuritySettings(securityData *simplejson.Json, nodeInfo *
 			if privateKey, err := tlsReality.Get("private_key").String(); err == nil {
 				nodeInfo.TlsSettings.RealityPrivateKey = privateKey
 			}
-			if serverName, ok := tlsReality.CheckGet("server_name"); ok {
+			if serverName, ok := tlsReality.CheckGet("handshake_server"); ok {
 				nodeInfo.TlsSettings.RealityServerName = serverName.MustString()
 			}
-			serverPort, ok := tlsReality.CheckGet("server_port")
+			serverPort, ok := tlsReality.CheckGet("handshake_server_port")
 			if ok {
 				if port, err := serverPort.Int(); err == nil {
 					nodeInfo.TlsSettings.RealityServerPort = uint16(port)
@@ -321,19 +321,40 @@ func (c *Client) parseSecuritySettings(securityData *simplejson.Json, nodeInfo *
 }
 
 func (c *Client) GetNodeRule() (*[]DetectRules, error) {
-	rules := c.resp.Load().(*serverConfig).RulesSettings
-	ruleList := make([]DetectRules, 0, len(rules))
+	rules := new(ruleConfig)
+	res, err := c.client.R().
+		SetBody(map[string]string{"key": c.APIKey, "core": "singbox"}).
+		ForceContentType("application/json").
+		SetPathParam("serverId", strconv.Itoa(c.NodeID)).
+		SetHeader("If-None-Match", c.eTags["rule"]).
+		Post("/api/server/rules/{serverId}")
+	if err != nil {
+		return nil, err
+	}
+	if res.StatusCode() == 304 {
+		return nil, errors.New(RuleNotModified)
+	}
+	if res.Header().Get("Etag") != "" && res.Header().Get("Etag") != c.eTags["rule"] {
+		c.eTags["rule"] = res.Header().Get("Etag")
+	}
+	response, err := c.checkResponse(res, err)
+	if err != nil {
+		return nil, err
+	}
+	b, _ := response.Encode()
+	json.Unmarshal(b, rules)
+	c.resp.Store(rules)
 
-	for i := range rules {
-		re, err := regexp.Compile(rules[i].Regex)
+	ruleList := make([]DetectRules, 0, len(rules.RulesSettings))
+	for i := range rules.RulesSettings {
+		re, err := regexp.Compile(rules.RulesSettings[i].Regex)
 		if err != nil {
-			return nil, fmt.Errorf("invalid regex for rule %d %q: %w", rules[i].Id, rules[i].Regex, err)
+			return nil, fmt.Errorf("invalid regex for rule %d %q: %w", rules.RulesSettings[i].Id, rules.RulesSettings[i].Regex, err)
 		}
 		ruleList = append(ruleList, DetectRules{
-			ID:      rules[i].Id,
+			ID:      rules.RulesSettings[i].Id,
 			Pattern: re,
 		})
 	}
-
 	return &ruleList, nil
 }

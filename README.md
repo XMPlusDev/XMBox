@@ -249,8 +249,8 @@ Nodes:
       "short_ids": [],
       "private_key": "",
       "public_key": "",
-      "server_name": "www.microsoft.com",
-      "server_port": "443"
+      "handshake_server": "www.microsoft.com",
+      "handshake_server_port": "443"
     }
   }
 }

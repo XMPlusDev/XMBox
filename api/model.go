@@ -40,7 +40,10 @@ type server struct {
 	IP                  string   			`json:"ip"`
 	NetworkSettings     *json.RawMessage 	`json:"transportSettings"`
 	SecuritySettings    *json.RawMessage 	`json:"securitySettings"`
-	RulesSettings       []rule              `json:"rules"`
+}
+
+type ruleConfig struct {
+	RulesSettings       []rule              `json:"ruleSettings"`
 }
 
 type rule struct {

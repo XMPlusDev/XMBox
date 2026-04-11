@@ -200,22 +200,13 @@ func (c *Controller) nodeInfoMonitor() error {
 			return nil
 		}
 	}
-
+	
 	if nodeInfoChanged && !reflect.DeepEqual(c.nodeInfo, newNodeInfo) {
 		oldTag := c.Tag
 		oldNodeInfo := c.nodeInfo
 
 		c.nodeInfo = newNodeInfo
 		c.Tag = c.buildNodeTag()
-		
-		if ruleList, err := c.client.GetNodeRule(); err != nil {
-			log.Printf("%s Failed to get rule list: %s", c.LogPrefix, err)
-		} else if len(*ruleList) > 0 {
-			log.Printf("%s Updating %d node rules", c.LogPrefix, len(*ruleList))
-			if err := rule.UpdateRule(c.Tag, *ruleList); err != nil {
-				log.Printf("%s Failed to update rules: %s", c.LogPrefix, err)
-			}
-		}
 
 		if err = c.nodeManager.RemoveNode(oldTag); err != nil {
 			log.Printf("%s Failed to remove node: %v", c.LogPrefix, err)
@@ -248,7 +239,6 @@ func (c *Controller) nodeInfoMonitor() error {
 			log.Panic(err)
 			return nil
 		}
-
 	} else if subscriptionChanged {
 		deleted, added, modified := subscription.CompareSubscriptions(c.subscriptionList, newSubscriptionInfo)
 
@@ -288,6 +278,24 @@ func (c *Controller) nodeInfoMonitor() error {
 			}
 			
 			log.Printf("%s Modified %d subscription(s)", c.LogPrefix, len(modified))
+		}
+	}
+	
+	var ruleChanged = true
+	ruleList, err := c.client.GetNodeRule()
+	if err != nil {
+		if err.Error() == api.RuleNotModified {
+			ruleChanged = false
+		} else {
+			log.Printf("%s Failed to get rule list: %s", c.LogPrefix, err)
+			return nil
+		}
+	}
+
+	if ruleChanged && ruleList != nil && len(*ruleList) > 0 {
+		log.Printf("%s Updating %d node rules", c.LogPrefix, len(*ruleList))
+		if err := rule.UpdateRule(c.Tag, *ruleList); err != nil {
+			log.Printf("%s Failed to update rules: %s", c.LogPrefix, err)
 		}
 	}
 
