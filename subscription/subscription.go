@@ -81,7 +81,7 @@ func (m *Manager) Add(subscriptions *[]api.SubscriptionInfo, ib interface{ Tag()
 		}
 		out := make([]option.TUICUser, len(*subscriptions))
 		for i, u := range *subscriptions {
-			out[i] = option.TUICUser{Name: u.UUID, UUID: u.UUID, Password: u.UUID}
+			out[i] = option.TUICUser{Name: u.UUID, UUID: u.UUID, Password: base64.StdEncoding.EncodeToString([]byte(u.UUID))}
 		}
 		return mgr.AddUsers(out)
 
@@ -103,7 +103,7 @@ func (m *Manager) Add(subscriptions *[]api.SubscriptionInfo, ib interface{ Tag()
 		}
 		out := make([]auth.User, len(*subscriptions))
 		for i, u := range *subscriptions {
-			out[i] = auth.User{Username: u.UUID, Password: u.UUID}
+			out[i] = auth.User{Username: u.UUID, Password: base64.StdEncoding.EncodeToString([]byte(u.UUID))}
 		}
 		return mgr.AddUsers(out)
 
@@ -130,7 +130,7 @@ func (m *Manager) Add(subscriptions *[]api.SubscriptionInfo, ib interface{ Tag()
 		}
 		out := make([]option.ShadowTLSUser, len(*subscriptions))
 		for i, u := range *subscriptions {
-			out[i] = option.ShadowTLSUser{Name: u.UUID, Password: u.UUID}
+			out[i] = option.ShadowTLSUser{Name: u.UUID, Password: base64.StdEncoding.EncodeToString([]byte(u.UUID))}
 		}
 		return mgr.AddUsers(out)
 
@@ -141,7 +141,7 @@ func (m *Manager) Add(subscriptions *[]api.SubscriptionInfo, ib interface{ Tag()
 		}
 		out := make([]option.AnyTLSUser, len(*subscriptions))
 		for i, u := range *subscriptions {
-			out[i] = option.AnyTLSUser{Name: u.UUID, Password: u.UUID}
+			out[i] = option.AnyTLSUser{Name: u.UUID, Password: base64.StdEncoding.EncodeToString([]byte(u.UUID))}
 		}
 		return mgr.AddUsers(out)
 
