@@ -9,6 +9,7 @@ import (
 	"regexp"
     
 	"github.com/bitly/go-simplejson"
+	"github.com/go-resty/resty/v2"
 )
 
 func (c *Client) GetNodeInfo() (*NodeInfo, error) {
@@ -327,12 +328,12 @@ func (c *Client) parseSecuritySettings(securityData *simplejson.Json, nodeInfo *
 }
 
 func (c *Client) GetNodeRule() (*[]DetectRules, error) {
-	rules := new(ruleConfig)
 	res, err := c.client.R().
 		SetBody(map[string]string{"key": c.APIKey, "core": "singbox"}).
 		ForceContentType("application/json").
 		SetPathParam("serverId", strconv.Itoa(c.NodeID)).
 		SetHeader("If-None-Match", c.eTags["rule"]).
+		SetResult(&RuleResponse{}).
 		Post("/api/server/rules/{serverId}")
 	if err != nil {
 		return nil, err
@@ -343,22 +344,43 @@ func (c *Client) GetNodeRule() (*[]DetectRules, error) {
 	if res.Header().Get("Etag") != "" && res.Header().Get("Etag") != c.eTags["rule"] {
 		c.eTags["rule"] = res.Header().Get("Etag")
 	}
-	response, err := c.checkResponse(res, err)
+
+	response, err := c.parseRuleResponse(res, err)
 	if err != nil {
 		return nil, err
 	}
-	b, _ := response.Encode()
-	json.Unmarshal(b, rules)
-	c.resp.Store(rules)
 
-	ruleList := make([]DetectRules, 0, len(rules.RulesSettings))
-	for i := range rules.RulesSettings {
-		re, err := regexp.Compile(rules.RulesSettings[i].Regex)
+	var rulesList []Rule
+	if err := json.Unmarshal(response.Data, &rulesList); err != nil {
+		return nil, fmt.Errorf("unmarshal rules failed: %s", err)
+	}
+
+	return c.parseRulesList(&rulesList)
+}
+
+func (c *Client) parseRuleResponse(res *resty.Response, err error) (*RuleResponse, error) {
+	if err != nil {
+		return nil, fmt.Errorf("rule request failed: %s", err)
+	}
+	if res.StatusCode() >= 400 {
+		return nil, fmt.Errorf("rule request error: %s", string(res.Body()))
+	}
+	response, ok := res.Result().(*RuleResponse)
+	if !ok || response == nil {
+		return nil, fmt.Errorf("failed to parse rule response")
+	}
+	return response, nil
+}
+
+func (c *Client) parseRulesList(rulesListResponse *[]Rule) (*[]DetectRules, error) {
+	ruleList := make([]DetectRules, 0, len(*rulesListResponse))
+	for _, rule := range *rulesListResponse {
+		re, err := regexp.Compile(rule.Regex)
 		if err != nil {
-			return nil, fmt.Errorf("invalid regex for rule %d %q: %w", rules.RulesSettings[i].Id, rules.RulesSettings[i].Regex, err)
+			return nil, fmt.Errorf("invalid regex for rule %d %q: %w", rule.Id, rule.Regex, err)
 		}
 		ruleList = append(ruleList, DetectRules{
-			ID:      rules.RulesSettings[i].Id,
+			ID:      rule.Id,
 			Pattern: re,
 		})
 	}

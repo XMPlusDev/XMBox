@@ -70,6 +70,16 @@ func (c *Controller) Start() error {
 	}
 	c.nodeInfo = newNodeInfo
 	c.Tag = c.buildNodeTag()
+	c.LogPrefix = c.logPrefix()
+	
+	if ruleList, err := c.client.GetNodeRule(); err != nil {
+		log.Printf("Get rule list filed: %s", err)
+	} else if len(*ruleList) > 0 {
+		log.Printf("%s Adding %d node rules", c.LogPrefix, len(*ruleList))
+		if err := rule.UpdateRule(c.Tag, *ruleList); err != nil {
+			log.Print(err)
+		}
+	}
 
 	subscriptionInfo, err := c.client.GetSubscriptionList()
 	if err != nil {
@@ -85,7 +95,7 @@ func (c *Controller) Start() error {
 	if err = c.subManager.AddSubscriptions(subscriptionInfo, newNodeInfo, c.Tag); err != nil {
 		return err
 	}
-	log.Printf("%s Added %d subscriptions", c.logPrefix(), len(*subscriptionInfo))
+	log.Printf("%s Added %d subscriptions", c.LogPrefix, len(*subscriptionInfo))
 
 	if err = limiter.AddLimiter(
 		c.Tag,
@@ -96,16 +106,6 @@ func (c *Controller) Start() error {
 	); err != nil {
 		log.Print(err)
 	}
-	
-	if ruleList, err := c.client.GetNodeRule(); err != nil {
-		log.Printf("Get rule list filed: %s", err)
-	} else if len(*ruleList) > 0 {
-		if err := rule.UpdateRule(c.Tag, *ruleList); err != nil {
-			log.Print(err)
-		}
-	}
-
-	c.LogPrefix = c.logPrefix()
 
 	c.taskManager.Add(task.NewWithInterval(
 		c.LogPrefix,
@@ -132,12 +132,12 @@ func (c *Controller) Start() error {
 		))
 	}
 
-	log.Printf("%s Starting %d task schedulers", c.logPrefix(), c.taskManager.Count())
+	log.Printf("%s Starting %d task schedulers", c.LogPrefix, c.taskManager.Count())
 	return c.taskManager.StartAll()
 }
 
 func (c *Controller) Close() error {
-	log.Printf("%s Closing %d task schedulers", c.logPrefix(), c.taskManager.Count())
+	log.Printf("%s Closing %d task schedulers", c.LogPrefix, c.taskManager.Count())
 	return c.taskManager.CloseAll()
 }
 

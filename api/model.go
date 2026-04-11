@@ -42,13 +42,18 @@ type server struct {
 	SecuritySettings    *json.RawMessage 	`json:"securitySettings"`
 }
 
-type ruleConfig struct {
-	RulesSettings       []rule              `json:"ruleSettings"`
+type RuleResponse struct {
+	Data               json.RawMessage     `json:"ruleSettings"`
 }
 
-type rule struct {
+type Rule struct {
 	Id       int      `json:"id"`
 	Regex    string   `json:"value"`
+}
+
+type DetectRules struct {
+	ID      int
+	Pattern *regexp.Regexp
 }
 
 type SubscriptionResponse struct {
@@ -163,9 +168,4 @@ type Traffic struct {
 type AliveIP struct {
 	Id 		int    		`json:"subscription_id"`
 	IP  	string 		`json:"ip"`
-}
-
-type DetectRules struct {
-	ID      int
-	Pattern *regexp.Regexp
 }
