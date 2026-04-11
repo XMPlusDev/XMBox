@@ -338,11 +338,19 @@ func (c *Client) GetNodeRule() (*[]DetectRules, error) {
 	if err != nil {
 		return nil, err
 	}
+	
 	if res.StatusCode() == 304 {
 		return nil, errors.New(RuleNotModified)
 	}
-	if res.Header().Get("Etag") != "" && res.Header().Get("Etag") != c.eTags["rule"] {
-		c.eTags["rule"] = res.Header().Get("Etag")
+	
+	if res.Header().Get("ETag") != "" {
+		if res.Header().Get("ETag") == c.eTags["rule"] {
+			return nil, errors.New(RuleNotModified)
+		}
+		
+	    if res.Header().Get("ETag") != c.eTags["rule"] {
+			c.eTags["rule"] = res.Header().Get("ETag")
+		}
 	}
 
 	response, err := c.parseRuleResponse(res, err)
