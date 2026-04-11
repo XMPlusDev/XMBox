@@ -156,6 +156,7 @@ func getInboundOptions(tag string, nodeInfo *api.NodeInfo, config *Config) (opti
 		in.Type = "naive"
 		in.Options = &option.NaiveInboundOptions{
 			ListenOptions:              listen,
+			QUICCongestionControl:      nodeInfo.NetworkSettings.QUICCongestionControl,
 			InboundTLSOptionsContainer: option.InboundTLSOptionsContainer{TLS: &tls},
 		}
 

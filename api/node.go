@@ -224,6 +224,12 @@ func (c *Client) parseNetworkSettings(networkData *simplejson.Json, nodeInfo *No
 		nodeInfo.NetworkSettings.CongestionControl = networkCongestionControl.MustString()
 	}
 	
+	//Naive
+	networkQUICCongestionControl, controlExist := networkData.CheckGet("quic_congestion_control")
+	if controlExist {
+		nodeInfo.NetworkSettings.QUICCongestionControl = networkQUICCongestionControl.MustString()
+	}
+	
 	// AnyTls
 	if paddingArray, err := networkData.Get("padding_scheme").StringArray(); err == nil {
 		nodeInfo.NetworkSettings.PaddingScheme = paddingArray

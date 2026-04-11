@@ -80,6 +80,9 @@ Nodes:
   "ignore_client_bandwidth": true,
   //tuic
   "congestion_control": "bbr",
+  //naive
+  "enable_quic" : false,
+  "quic_congestion_control": "bbr",
   //anytls
   "padding_scheme": [],
   //shadowtls
@@ -116,6 +119,9 @@ Nodes:
   "ignore_client_bandwidth": true,
   //tuic
   "congestion_control": "bbr",
+  //naive
+  "enable_quic" : false,
+  "quic_congestion_control": "bbr",
   //anytls
   "padding_scheme": [],
   //shadowtls
@@ -148,6 +154,9 @@ Nodes:
   "ignore_client_bandwidth": true,
   //tuic
   "congestion_control": "bbr",
+  //naive
+  "enable_quic" : false,
+  "quic_congestion_control": "bbr",
   //anytls
   "padding_scheme": [],
   //shadowtls
@@ -180,6 +189,9 @@ Nodes:
   "ignore_client_bandwidth": true,
   //tuic
   "congestion_control": "bbr",
+  //naive
+  "enable_quic" : false,
+  "quic_congestion_control": "bbr",
   //anytls
   "padding_scheme": [],
   //shadowtls
@@ -213,6 +225,9 @@ Nodes:
   "ignore_client_bandwidth": true,
   //tuic
   "congestion_control": "bbr",
+  //naive
+  "enable_quic" : false,
+  "quic_congestion_control": "bbr",
   //anytls
   "padding_scheme": [],
   //shadowtls

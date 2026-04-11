@@ -63,10 +63,12 @@ type Subscription struct {
 }
 
 type NetworkSettings struct {
-	Type     	string   	
+	Type     	string 
+	
+	//shadowsocks
 	Cipher      string     
 	
-	// WebSocket
+	//websocket
 	Path    string  
 	Host    string  
 	Method  string  	
@@ -75,28 +77,31 @@ type NetworkSettings struct {
 	
 	MaxEarlyData  uint32   
 
-	// gRPC
+	//grpc
 	ServiceName string 		
 	
-	//Hysteria
+	//hysteria
 	ObfsType    string     
 	ObfsPasswd  string		
 	BBRProfile  string    	
 	IgnoreClientBandwidth  bool 
 	
-	// TUIC congestion control: bbr | cubic | new_reno
+	//tuic 
 	CongestionControl string 
 	
-	// Flow xtls
+	//vless
 	Flow     string
 	
-	//Shasowtls
+	//shasowtls
 	HandshakeServer 	string
 	HandshakePort 		uint16 
 	StrictMode          bool  
 	
-	// anytls
+	//anytls
 	PaddingScheme  []string
+	
+	//naive
+	QUICCongestionControl string
 }
 
 // TLSSettings holds TLS and REALITY configuration.
