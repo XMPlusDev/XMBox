@@ -84,7 +84,7 @@ Nodes:
   "padding_scheme": [],
   //shadowtls
   "strict_mode": false,
-  "handshake_server": "google.com",
+  "handshake_server": "www.microsoft.com",
   "handshake_server_port": 443
 }
 ```
@@ -100,7 +100,7 @@ Nodes:
       "header": {
         "type": "http",
         "path": "/",
-        "host": "www.baidu.com",
+        "host": "www.cloudflare.com",
 		"method": "GET"
       }
     }
@@ -120,7 +120,7 @@ Nodes:
   "padding_scheme": [],
   //shadowtls
   "strict_mode": false,
-  "handshake_server": "google.com",
+  "handshake_server": "www.microsoft.com",
   "handshake_server_port": 443
 }
 ```
@@ -152,7 +152,7 @@ Nodes:
   "padding_scheme": [],
   //shadowtls
   "strict_mode": false,
-  "handshake_server": "google.com",
+  "handshake_server": "www.microsoft.com",
   "handshake_server_port": 443
 }
 ```
@@ -184,7 +184,7 @@ Nodes:
   "padding_scheme": [],
   //shadowtls
   "strict_mode": false,
-  "handshake_server": "google.com",
+  "handshake_server": "www.microsoft.com",
   "handshake_server_port": 443
 }
 ```
@@ -217,7 +217,7 @@ Nodes:
   "padding_scheme": [],
   //shadowtls
   "strict_mode": false,
-  "handshake_server": "google.com",
+  "handshake_server": "www.microsoft.com",
   "handshake_server_port": 443
 }
 ```
@@ -230,14 +230,12 @@ Nodes:
   "tlsSettings": {
     "enabled": true,
     "insecure": false,
+    "cert_mode": "http",
+    "server_name": "tld.dev",
     "alpn": [
       "h2",
       "http/1.1"
     ],
-    "cert_mode": "http",
-    "server_name": "google.com",
-    "fragment": false,
-    "record_fragment": false,
     "ech": {
       "enabled": false,
       "key": [],
