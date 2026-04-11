@@ -81,12 +81,7 @@ func (m *Manager) Add(subscriptions *[]api.SubscriptionInfo, ib interface{ Tag()
 		}
 		out := make([]option.TUICUser, len(*subscriptions))
 		for i, u := range *subscriptions {
-			userPass, err := userPassword(u.UUID)
-			if err != nil {
-				fmt.Errorf("password for [SID: %d] %s error: ", u.Id, err)
-				continue
-			}
-			out[i] = option.TUICUser{Name: u.UUID, UUID: u.UUID, Password: userPass}
+			out[i] = option.TUICUser{Name: u.UUID, UUID: u.UUID, Password: u.UUID}
 		}
 		return mgr.AddUsers(out)
 
@@ -108,12 +103,7 @@ func (m *Manager) Add(subscriptions *[]api.SubscriptionInfo, ib interface{ Tag()
 		}
 		out := make([]auth.User, len(*subscriptions))
 		for i, u := range *subscriptions {
-			userPass, err := userPassword(u.UUID)
-			if err != nil {
-				fmt.Errorf("password for [SID: %d] %s error: ", u.Id, err)
-				continue
-			}
-			out[i] = auth.User{Username: u.UUID, Password: userPass}
+			out[i] = auth.User{Username: u.UUID, Password: u.UUID}
 		}
 		return mgr.AddUsers(out)
 
@@ -140,12 +130,7 @@ func (m *Manager) Add(subscriptions *[]api.SubscriptionInfo, ib interface{ Tag()
 		}
 		out := make([]option.ShadowTLSUser, len(*subscriptions))
 		for i, u := range *subscriptions {
-			userPass, err := userPassword(u.UUID)
-			if err != nil {
-				fmt.Errorf("password for [SID: %d] %s error: ", u.Id, err)
-				continue
-			}
-			out[i] = option.ShadowTLSUser{Name: u.UUID, Password: userPass}
+			out[i] = option.ShadowTLSUser{Name: u.UUID, Password: u.UUID}
 		}
 		return mgr.AddUsers(out)
 
@@ -156,12 +141,7 @@ func (m *Manager) Add(subscriptions *[]api.SubscriptionInfo, ib interface{ Tag()
 		}
 		out := make([]option.AnyTLSUser, len(*subscriptions))
 		for i, u := range *subscriptions {
-			userPass, err := userPassword(u.UUID)
-			if err != nil {
-				fmt.Errorf("password for [SID: %d] %s error: ", u.Id, err)
-				continue
-			}
-			out[i] = option.AnyTLSUser{Name: u.UUID, Password: userPass}
+			out[i] = option.AnyTLSUser{Name: u.UUID, Password: u.UUID}
 		}
 		return mgr.AddUsers(out)
 
@@ -179,16 +159,6 @@ func GetUUIDs(subscriptions []api.SubscriptionInfo) []string {
 		uuids[i] = u.UUID
 	}
 	return uuids
-}
-
-func userPassword(password string) (string, error) {
-	var userKey string
-	if len(password) < 32 {
-		return "", fmt.Errorf("password length must be greater than 31")
-	}
-	userKey = password[:32]
-	
-	return base64.StdEncoding.EncodeToString([]byte(userKey)), nil
 }
 
 func ssPassword(password string, method string) (string, error) {

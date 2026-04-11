@@ -107,20 +107,27 @@ func (c *Controller) Start() error {
 		log.Print(err)
 	}
 
-	c.taskManager.Add(task.NewWithInterval(
+	c.taskManager.Add(task.NewWithDelay(
 		c.LogPrefix,
 		"server",
 		time.Duration(c.nodeInfo.UpdateInterval)*time.Second,
 		c.nodeInfoMonitor,
 	))
 
-	c.taskManager.Add(task.NewWithInterval(
+	c.taskManager.Add(task.NewWithDelay(
 		c.LogPrefix,
 		"subscriptions",
 		time.Duration(c.nodeInfo.UpdateInterval)*time.Second,
 		func() error {
 			return c.subManager.SubscriptionMonitor(c.subscriptionList, c.Tag, c.LogPrefix)
 		},
+	))
+	
+	c.taskManager.Add(task.NewWithDelay(
+		c.LogPrefix,
+		"rules",
+		time.Duration(c.nodeInfo.UpdateInterval)*time.Second,
+		c.ruleMonitor,
 	))
 
 	if c.nodeInfo.TlsSettings != nil && c.nodeInfo.TlsSettings.Type == "tls" {
@@ -280,25 +287,26 @@ func (c *Controller) nodeInfoMonitor() error {
 			log.Printf("%s Modified %d subscription(s)", c.LogPrefix, len(modified))
 		}
 	}
-	
-	var ruleChanged = true
-	ruleList, err := c.client.GetNodeRule()
-	if err != nil {
-		if err.Error() == api.RuleNotModified {
-			ruleChanged = false
-		} else {
-			log.Printf("%s Failed to get rule list: %s", c.LogPrefix, err)
-			return nil
-		}
-	}
-
-	if ruleChanged && ruleList != nil && len(*ruleList) > 0 {
-		log.Printf("%s Updating %d node rules", c.LogPrefix, len(*ruleList))
-		if err := rule.UpdateRule(c.Tag, *ruleList); err != nil {
-			log.Printf("%s Failed to update rules: %s", c.LogPrefix, err)
-		}
-	}
 
 	c.subscriptionList = newSubscriptionInfo
 	return nil
+}
+
+func (c *Controller) ruleMonitor() error {
+    ruleList, err := c.client.GetNodeRule()
+    if err != nil {
+        if err.Error() == api.RuleNotModified {
+            return nil
+        }
+        log.Printf("%s Failed to get rule list: %s", c.LogPrefix, err)
+        return err
+    }
+    if ruleList != nil && len(*ruleList) > 0 {
+        log.Printf("%s Updating %d node rules", c.LogPrefix, len(*ruleList))
+        if err := rule.UpdateRule(c.Tag, *ruleList); err != nil {
+            log.Printf("%s Failed to update rules: %s", c.LogPrefix, err)
+            return err
+        }
+    }
+    return nil
 }
