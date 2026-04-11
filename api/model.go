@@ -63,6 +63,7 @@ type SubscriptionResponse struct {
 type Subscription struct {
 	Id         	int    		`json:"id"`
 	UUID     	string 		`json:"passwd"`
+	Email     	string 		`json:"email"`
 	Speedlimit 	int    		`json:"speed_limit"`
 	Iplimit    	int    		`json:"ip_limit"`
 }
@@ -143,6 +144,7 @@ type NodeInfo struct {
 type SubscriptionInfo struct {
 	Id           int
 	UUID         string
+	Email     	 string
 	SpeedLimit   uint64
 	IPLimit      int
 }

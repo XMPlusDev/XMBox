@@ -24,6 +24,7 @@ var globalLimiter = New()
 type SubscriptionInfo struct {
 	Id         int
 	UUID       string
+	Email      string
 	SpeedLimit uint64
 	IPLimit    int
 }
@@ -80,6 +81,7 @@ func (l *Limiter) AddLimiter(tag string, expiry int, nodeSpeedLimit uint64, subs
 		subscriptionMap.Store(fmt.Sprintf("%s|%s", tag, u.UUID), SubscriptionInfo{
 			Id:         u.Id,
 			UUID:       u.UUID,
+			Email:      u.Email,
 			SpeedLimit: u.SpeedLimit,
 			IPLimit:    u.IPLimit,
 		})
@@ -101,6 +103,7 @@ func (l *Limiter) UpdateLimiter(tag string, updatedSubscriptionList *[]api.Subsc
 		inboundInfo.SubscriptionInfo.Store(userTag, SubscriptionInfo{
 			Id:         u.Id,
 			UUID:       u.UUID,
+			Email:      u.Email,
 			SpeedLimit: u.SpeedLimit,
 			IPLimit:    u.IPLimit,
 		})
@@ -198,11 +201,8 @@ func (l *Limiter) GetOnlineIPs(tag string) (*[]api.OnlineIP, error) {
 					remaining = append(remaining, data)
 				}
 			}
-			if len(remaining) == 0 {
-				delete(*ipMap, ip)
-			} else {
-				(*ipMap)[ip] = remaining
-			}
+			
+			(*ipMap)[ip] = remaining
 		}
 
 		if modified {
@@ -214,11 +214,11 @@ func (l *Limiter) GetOnlineIPs(tag string) (*[]api.OnlineIP, error) {
 	return &onlineIP, nil
 }
 
-func (l *Limiter) CheckLimiter(tag, uuid, ip string) (*rate.Limiter, bool, bool) {
+func (l *Limiter) CheckLimiter(tag, uuid, ip string) (*rate.Limiter, bool, bool, string) {
 	value, ok := l.InboundInfo.Load(tag)
 	if !ok {
 		log.Printf("Get Limiter information failed for tag: %s", tag)
-		return nil, false, false
+		return nil, false, false, ""
 	}
 
 	inboundInfo := value.(*InboundInfo)
@@ -228,33 +228,35 @@ func (l *Limiter) CheckLimiter(tag, uuid, ip string) (*rate.Limiter, bool, bool)
 		speedLimit uint64
 		ipLimit    int
 		uid        int
+		email      string
 	)
 	if v, ok := inboundInfo.SubscriptionInfo.Load(userTag); ok {
 		u := v.(SubscriptionInfo)
 		uid = u.Id
+		email = u.Email
 		speedLimit = u.SpeedLimit
 		ipLimit = u.IPLimit
 	}
 
 	if inboundInfo.GlobalIPLimit.config != nil && inboundInfo.GlobalIPLimit.config.Enable {
 		if checkLimit(inboundInfo, userTag, uid, ip, ipLimit, tag) {
-			return nil, false, true
+			return nil, false, true, email
 		}
 	}
 
 	limit := determineRate(inboundInfo.NodeSpeedLimit, speedLimit)
 	if limit == 0 {
-		return nil, false, false
+		return nil, false, false, email
 	}
 
 	if v, ok := inboundInfo.BucketHub.Load(userTag); ok {
-		return v.(*rate.Limiter), true, false
+		return v.(*rate.Limiter), true, false, email
 	}
 	lim := rate.NewLimiter(rate.Limit(limit), int(limit))
 	if v, loaded := inboundInfo.BucketHub.LoadOrStore(userTag, lim); loaded {
-		return v.(*rate.Limiter), true, false
+		return v.(*rate.Limiter), true, false, email
 	}
-	return lim, true, false
+	return lim, true, false, email
 }
 
 func checkLimit(inboundInfo *InboundInfo, userTag string, uid int, ip string, ipLimit int, tag string) bool {

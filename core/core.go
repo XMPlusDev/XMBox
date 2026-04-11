@@ -112,7 +112,7 @@ func (i *Instance) load(config *Config) (*loadResult, error) {
 	b, err := box.New(box.Options{Context: ctx, Options: opts})
 	if err != nil {
 		log.Panic(err)
-		return nil, fmt.Errorf("create sing-box instance: %w", err)
+		return nil, fmt.Errorf("create instance: %w", err)
 	}
 
 	dispatcher := &Dispatcher{}
@@ -164,8 +164,10 @@ func (i *Instance) Start() error {
 		i.dispatcher = nil
 		i.logFactory = nil
 		log.Panic(err)
-		return fmt.Errorf("start sing-box instance: %w", err)
+		return fmt.Errorf("start instance: %w", err)
 	}
+	
+	log.Println("XMBox successfully started")
 
 	for _, nodeConfig := range i.config.NodesConfig {
 		svc := globalFactory(i, nodeConfig)

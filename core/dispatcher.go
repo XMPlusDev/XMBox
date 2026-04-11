@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"strings"
 	"time"
+	logger "log"
 
 	"github.com/xmplusdev/xmbox/helper/counter"
 	"github.com/xmplusdev/xmbox/helper/rate"
@@ -49,13 +50,13 @@ func (d *Dispatcher) RoutedConnection(
 
 	ip := m.Source.Addr.String()
 
-	bucket, _, reject := l.CheckLimiter(m.Inbound, m.User, ip)
+	bucket, isSpeedlimited, reject, email := l.CheckLimiter(m.Inbound, m.User, ip)
 	if reject {
 		conn.Close()
-		log.Error(fmt.Sprintf("[%s]: IP limit (UDP) exceeded for %s, connection closed", m.Inbound, maskIP(ip, 2)))
+		logger.Printf(fmt.Sprintf("[%s]: IP limit exceeded for user %s. (TCP) connection from %s closed", m.Inbound, email, maskIP(ip, 2)))
 		return newDeadConn(conn)
 	}
-	if bucket != nil {
+	if bucket != nil && isSpeedlimited {
 		conn = rate.NewConn(conn, bucket, bucket) 
 	}
 	
@@ -64,7 +65,7 @@ func (d *Dispatcher) RoutedConnection(
 		dest := m.Destination.AddrString()
 		if r.CheckRule(m.Inbound, dest) {
 			conn.Close()
-			log.Error(fmt.Sprintf("[%s] destination [%s] restriction detected, connection closed", m.Inbound, dest))
+			logger.Printf(fmt.Sprintf("[%s] destination [%s] matched restriction rule, connection closed", m.Inbound, dest))
 			return newDeadConn(conn)
 		}
 	}
@@ -102,14 +103,14 @@ func (d *Dispatcher) RoutedPacketConnection(
 
 	ip := m.Source.Addr.String()
 
-	bucket, _, reject := l.CheckLimiter(m.Inbound, m.User, ip)
+	bucket, isSpeedlimited, reject, email := l.CheckLimiter(m.Inbound, m.User, ip)
 	if reject {
 		conn.Close()
-		log.Error(fmt.Sprintf("[%s]: IP limit (UDP) exceeded for %s, connection closed", m.Inbound, maskIP(ip, 2)))
+		logger.Printf(fmt.Sprintf("[%s]: IP limit exceeded for user %s. (UDP) connection from %s closed", m.Inbound, email, maskIP(ip, 2)))
 		return newDeadPacketConn(conn)
 	}
 
-	if bucket != nil {
+	if bucket != nil && isSpeedlimited {
 		conn = rate.NewPacketConn(conn, bucket, bucket)
 	}
 	
@@ -118,7 +119,7 @@ func (d *Dispatcher) RoutedPacketConnection(
 		dest := m.Destination.AddrString()
 		if r.CheckRule(m.Inbound, dest) {
 			conn.Close()
-			log.Error(fmt.Sprintf("[%s] destination [%s] restriction detected, connection closed", m.Inbound, dest))
+			logger.Printf(fmt.Sprintf("[%s] destination [%s] matched restriction rule, connection closed", m.Inbound, dest))
 			return newDeadPacketConn(conn)
 		}
 	}

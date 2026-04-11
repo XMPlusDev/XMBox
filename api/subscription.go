@@ -71,6 +71,7 @@ func (c *Client) ParseSubscriptionList(subscriptionResponse *[]Subscription) (*[
 		subscriptionList = append(subscriptionList, SubscriptionInfo{
 			Id:         subscription.Id,
 			UUID:       subscription.UUID,
+			Email:      subscription.Email,
 			IPLimit:    subscription.Iplimit,
 			SpeedLimit: speedLimit,
 		})
