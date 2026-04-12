@@ -123,7 +123,6 @@ func getInboundOptions(tag string, nodeInfo *api.NodeInfo, config *Config) (opti
 		in.Options = trojanOpt
 
 	case "tuic":
-		tls.ALPN = append(tls.ALPN, "h3")
 		cc := nodeInfo.NetworkSettings.CongestionControl
 		if cc == "" {
 			cc = "bbr"
