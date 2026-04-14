@@ -65,8 +65,7 @@ func (c *Controller) Start() error {
 
 	newNodeInfo, err := c.client.GetNodeInfo()
 	if err != nil {
-		log.Panic(err)
-		return err
+		return fmt.Errorf("Controller GetNodeInfo: %w", err)
 	}
 	c.nodeInfo = newNodeInfo
 	c.Tag = c.buildNodeTag()
@@ -75,16 +74,15 @@ func (c *Controller) Start() error {
 	if ruleList, err := c.client.GetNodeRule(); err != nil {
 		log.Printf("Get rule list filed: %s", err)
 	} else if len(*ruleList) > 0 {
-		log.Printf("%s Adding %d node rules", c.LogPrefix, len(*ruleList))
+		log.Printf("%s Added %d node rules", c.LogPrefix, len(*ruleList))
 		if err := rule.UpdateRule(c.Tag, *ruleList); err != nil {
-			log.Print(err)
+			return fmt.Errorf("Controller GetNodeRule: %w", err)
 		}
 	}
 
 	subscriptionInfo, err := c.client.GetSubscriptionList()
 	if err != nil {
-		log.Panic(err)
-		return err
+		return fmt.Errorf("Controller GetSubscriptionList: %w", err)
 	}
 	c.subscriptionList = subscriptionInfo
 
@@ -93,7 +91,7 @@ func (c *Controller) Start() error {
 	}
 
 	if err = c.subManager.AddSubscriptions(subscriptionInfo, newNodeInfo, c.Tag); err != nil {
-		return err
+		return fmt.Errorf("Controller AddSubscriptions: %w", err)
 	}
 	log.Printf("%s Added %d subscriptions", c.LogPrefix, len(*subscriptionInfo))
 
@@ -104,7 +102,7 @@ func (c *Controller) Start() error {
 		subscriptionInfo,
 		c.config.RedisConfig,
 	); err != nil {
-		log.Print(err)
+		fmt.Errorf("Controller AddLimiter: %w", err)
 	}
 
 	c.taskManager.Add(task.NewWithDelay(
@@ -154,14 +152,14 @@ func (c *Controller) certMonitor() error {
         lego, err := cert.New(c.config.CertConfig)
         if err != nil {
             log.Printf("%s cert init failed: %v", c.LogPrefix, err)
-            return err
+            return fmt.Errorf("Controller CertMonitor Init: %w", err)
         }
         if _, _, _, err = lego.RenewCert(
             c.nodeInfo.TlsSettings.CertMode,
             c.nodeInfo.TlsSettings.ServerName,
         ); err != nil {
             log.Printf("%s cert renew failed: %v", c.LogPrefix, err)
-            return err
+            return fmt.Errorf("Controller CertMonitor Renew: %w", err)
         }
     }
     return nil
@@ -191,7 +189,7 @@ func (c *Controller) nodeInfoMonitor() error {
 			nodeInfoChanged = false
 			newNodeInfo = c.nodeInfo
 		} else {
-			log.Panic(err)
+			fmt.Errorf("Controller NodeInfoMonitor GetNodeInfo: %w", err)
 			return nil
 		}
 	}
@@ -203,7 +201,7 @@ func (c *Controller) nodeInfoMonitor() error {
 			subscriptionChanged = false
 			newSubscriptionInfo = c.subscriptionList
 		} else {
-			log.Panic(err)
+			fmt.Errorf("Controller NodeInfoMonitor GetSubscriptionList: %w", err)
 			return nil
 		}
 	}
@@ -222,17 +220,17 @@ func (c *Controller) nodeInfoMonitor() error {
 		}
 		c.coreInstance.DeleteCounter(oldTag)
 		if err = limiter.DeleteLimiter(oldTag); err != nil {
-			log.Panic(err)
+			fmt.Errorf("Controller NodeInfoMonitor DeleteLimiter: %w", err)
 		}
 
 		if err = c.nodeManager.AddNode(newNodeInfo, c.Tag, c.config); err != nil {
-			log.Panic(err)
+			fmt.Errorf("Controller NodeInfoMonitor AddNode: %w", err)
 			c.nodeInfo, c.Tag = oldNodeInfo, oldTag
 			return nil
 		}
 
 		if err = c.subManager.AddSubscriptions(newSubscriptionInfo, newNodeInfo, c.Tag); err != nil {
-			log.Panic(err)
+			fmt.Errorf("Controller NodeInfoMonitor AddSubscriptions: %w", err)
 			return nil
 		}
 
@@ -243,7 +241,7 @@ func (c *Controller) nodeInfoMonitor() error {
 			newSubscriptionInfo,
 			c.config.RedisConfig,
 		); err != nil {
-			log.Panic(err)
+			fmt.Errorf("Controller NodeInfoMonitor AddLimiter: %w", err)
 			return nil
 		}
 	} else if subscriptionChanged {

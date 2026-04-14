@@ -7,10 +7,10 @@ import (
 	"os/signal"
 	"path"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"syscall"
 	"time"
-	"runtime/debug"
 
 	"github.com/fsnotify/fsnotify"
 	log "github.com/sirupsen/logrus"
@@ -40,7 +40,6 @@ func init() {
 
 func getConfig() (*viper.Viper, error) {
 	config := viper.New()
-
 	if cfgFile != "" {
 		configName := path.Base(cfgFile)
 		configFileExt := path.Ext(cfgFile)
@@ -54,11 +53,9 @@ func getConfig() (*viper.Viper, error) {
 		config.SetConfigType("yaml")
 		config.AddConfigPath(".")
 	}
-
 	if err := config.ReadInConfig(); err != nil {
 		return nil, fmt.Errorf("read config file: %w", err)
 	}
-
 	config.WatchConfig()
 	return config, nil
 }
@@ -100,7 +97,7 @@ func run() error {
 		if execErr = syscall.Exec(exe, os.Args, os.Environ()); execErr != nil {
 			return fmt.Errorf("re-exec process: %w", execErr)
 		}
-		return nil 
+		return nil
 	}
 
 	return err
@@ -116,14 +113,9 @@ func runManager(config *viper.Viper, restartChan chan bool) (err error) {
 		return fmt.Errorf("parse config file %q: %w", cfgFile, err)
 	}
 
-	if boxConfig.LogConfig.Level == "debug" {
-		log.SetReportCaller(true)
-	} else {
-		log.SetReportCaller(false)
-	}
+	log.SetReportCaller(boxConfig.LogConfig.Level == "debug")
 
 	i := core.New(boxConfig)
-
 	if err = startManagerSafely(i); err != nil {
 		return fmt.Errorf("start instance: %w", err)
 	}
@@ -156,13 +148,39 @@ func runManager(config *viper.Viper, restartChan chan bool) (err error) {
 	}
 }
 
+func formatStack(stack []byte) string {
+	lines := strings.Split(strings.TrimSpace(string(stack)), "\n")
+	var b strings.Builder
+
+	if len(lines) > 0 {
+		b.WriteString(lines[0])
+		b.WriteByte('\n')
+		lines = lines[1:]
+	}
+
+	for i := 0; i+1 < len(lines); i += 2 {
+		fn := strings.TrimSpace(lines[i])
+		loc := strings.TrimSpace(lines[i+1])
+		b.WriteString(fmt.Sprintf("  → %s\n      %s\n", fn, loc))
+	}
+
+	if len(lines)%2 != 0 {
+		b.WriteString("  → ")
+		b.WriteString(strings.TrimSpace(lines[len(lines)-1]))
+		b.WriteByte('\n')
+	}
+
+	return b.String()
+}
+
 func startManagerSafely(i *core.Instance) (err error) {
 	if i == nil {
 		return fmt.Errorf("instance is nil")
 	}
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("panic during instance start: %v\n%s", r, debug.Stack())
+			stack := formatStack(debug.Stack())
+			err = fmt.Errorf("panic during instance start: %v\nStack trace:\n%s", r, stack)
 		}
 	}()
 	return i.Start()
