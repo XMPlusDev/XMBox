@@ -116,7 +116,7 @@ func runManager(config *viper.Viper, restartChan chan bool) (err error) {
 	log.SetReportCaller(boxConfig.LogConfig.Level == "debug")
 
 	i := core.New(boxConfig)
-	if err = startManagerSafely(i); err != nil {
+	if err = startInstanceSafely(i); err != nil {
 		return fmt.Errorf("start instance: %w", err)
 	}
 
@@ -173,7 +173,7 @@ func formatStack(stack []byte) string {
 	return b.String()
 }
 
-func startManagerSafely(i *core.Instance) (err error) {
+func startInstanceSafely(i *core.Instance) (err error) {
 	if i == nil {
 		return fmt.Errorf("instance is nil")
 	}
