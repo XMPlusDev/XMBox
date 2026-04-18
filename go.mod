@@ -11,8 +11,8 @@ require (
 	github.com/go-acme/lego/v4 v4.34.0
 	github.com/go-resty/resty/v2 v2.17.2
 	github.com/redis/go-redis/v9 v9.18.0
-	github.com/sagernet/sing v0.8.5-0.20260414061014-3597f84f897c
-	github.com/sagernet/sing-box v1.13.8-0.20260414070557-9c3c93c232fc
+	github.com/sagernet/sing v0.8.7-0.20260417135631-0d22698ed386
+	github.com/sagernet/sing-box v1.14.0-alpha.14
 	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
@@ -23,7 +23,7 @@ require (
 	github.com/anytls/sing-anytls v0.0.11
 	github.com/gofrs/uuid/v5 v5.4.0
 	github.com/sagernet/quic-go v0.59.0-sing-box-mod.4
-	github.com/sagernet/sing-quic v0.6.2-0.20260330152607-bf674c163212
+	github.com/sagernet/sing-quic v0.6.2-0.20260412143638-8f65b6be7cd6
 	github.com/sagernet/sing-shadowsocks v0.2.9
 	github.com/sagernet/sing-shadowtls v0.2.1-0.20250503051639-fcd445d33c11
 	github.com/sagernet/sing-vmess v0.2.8-0.20250909125414-3aed155119a1
@@ -280,7 +280,7 @@ require (
 	github.com/sagernet/gvisor v0.0.0-20250811.0-sing-box-mod.1 // indirect
 	github.com/sagernet/netlink v0.0.0-20240612041022-b9a21c07ac6a // indirect
 	github.com/sagernet/nftables v0.3.0-beta.4 // indirect
-	github.com/sagernet/sing-cloudflared v0.0.0-20260407120610-7715dc2523fa // indirect
+	github.com/sagernet/sing-cloudflared v0.0.0-20260416083718-efa6ab16dba9 // indirect
 	github.com/sagernet/sing-mux v0.3.4 // indirect
 	github.com/sagernet/sing-shadowsocks2 v0.2.1 // indirect
 	github.com/sagernet/sing-tun v0.8.8-0.20260410061515-018f5eaae695 // indirect
