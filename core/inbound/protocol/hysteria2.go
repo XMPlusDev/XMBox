@@ -24,6 +24,7 @@ import (
 	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
+	qtls "github.com/sagernet/sing-quic"
 )
 
 type Hysteria2Inbound struct {
@@ -139,6 +140,15 @@ func newHysteria2Inbound(
 		ReceiveBPS:            uint64(options.DownMbps * hysteria.MbpsToBps),
 		SalamanderPassword:    salamanderPassword,
 		TLSConfig:             tlsConfig,
+		QUICOptions: qtls.QUICOptions{
+			IdleTimeout:             options.IdleTimeout.Build(),
+			KeepAlivePeriod:         options.KeepAlivePeriod.Build(),
+			StreamReceiveWindow:     options.StreamReceiveWindow.Value(),
+			ConnectionReceiveWindow: options.ConnectionReceiveWindow.Value(),
+			MaxConcurrentStreams:    options.MaxConcurrentStreams,
+			InitialPacketSize:       options.InitialPacketSize,
+			DisablePathMTUDiscovery: options.DisablePathMTUDiscovery,
+		},
 		IgnoreClientBandwidth: options.IgnoreClientBandwidth,
 		UDPTimeout:            udpTimeout,
 		Handler:               h,

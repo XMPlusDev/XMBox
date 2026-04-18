@@ -20,6 +20,7 @@ import (
 	"github.com/sagernet/sing/common/auth"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
+	qtls "github.com/sagernet/sing-quic"
 
 	"github.com/gofrs/uuid/v5"
 )
@@ -84,6 +85,15 @@ func newTUICInbound(
 		Context:           ctx,
 		Logger:            logger,
 		TLSConfig:         tlsConfig,
+		QUICOptions: qtls.QUICOptions{
+			IdleTimeout:             options.IdleTimeout.Build(),
+			KeepAlivePeriod:         options.KeepAlivePeriod.Build(),
+			StreamReceiveWindow:     options.StreamReceiveWindow.Value(),
+			ConnectionReceiveWindow: options.ConnectionReceiveWindow.Value(),
+			MaxConcurrentStreams:    options.MaxConcurrentStreams,
+			InitialPacketSize:       options.InitialPacketSize,
+			DisablePathMTUDiscovery: options.DisablePathMTUDiscovery,
+		},
 		CongestionControl: options.CongestionControl,
 		AuthTimeout:       time.Duration(options.AuthTimeout),
 		ZeroRTTHandshake:  options.ZeroRTTHandshake,
