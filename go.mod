@@ -11,7 +11,7 @@ require (
 	github.com/go-acme/lego/v4 v4.34.0
 	github.com/go-resty/resty/v2 v2.17.2
 	github.com/redis/go-redis/v9 v9.18.0
-	github.com/sagernet/sing v0.8.7-0.20260416084641-60846c117dd8
+	github.com/sagernet/sing v0.8.8
 	github.com/sagernet/sing-box v1.14.0-alpha.13.0.20260417160933-bfaedb6db0bf
 	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/cobra v1.10.2
