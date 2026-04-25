@@ -12,7 +12,7 @@ require (
 	github.com/go-resty/resty/v2 v2.17.2
 	github.com/redis/go-redis/v9 v9.18.0
 	github.com/sagernet/sing v0.8.10-0.20260421111925-3e730f2301b4
-	github.com/sagernet/sing-box v1.14.0-alpha.16
+	github.com/sagernet/sing-box v1.14.0-alpha.17
 	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
