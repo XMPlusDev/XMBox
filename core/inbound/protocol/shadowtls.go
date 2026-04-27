@@ -204,7 +204,7 @@ func (h *ShadowTLSInbound) rebuildService() error {
 
 // ─── connection handling ─────────────────────────────────────────────────────
 
-func (h *ShadowTLSInbound) NewConnectionEx(ctx context.Context, conn net.Conn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
+func (h *ShadowTLSInbound) NewConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
 	svc := h.service.Load()
 	err := svc.NewConnection(adapter.WithContext(log.ContextWithNewID(ctx), &metadata), conn, metadata.Source, metadata.Destination, onClose)
 	N.CloseOnHandshakeFailure(conn, onClose, err)

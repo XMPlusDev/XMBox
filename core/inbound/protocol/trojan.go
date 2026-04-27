@@ -100,11 +100,11 @@ func newTrojanInbound(
 			}
 			h.fallbackAddrTLSNextProto = alpnMap
 		}
-		fallbackHandler = adapter.NewUpstreamContextHandlerEx(h.fallbackConnection, nil)
+		fallbackHandler = adapter.NewUpstreamContextHandler(h.fallbackConnection, nil)
 	}
 
 	service := trojan.NewService[int](
-		adapter.NewUpstreamContextHandlerEx(h.newConnection, h.newPacketConnection),
+		adapter.NewUpstreamContextHandler(h.newConnection, h.newPacketConnection),
 		fallbackHandler,
 		logger)
 	if err := service.UpdateUsers(
@@ -242,7 +242,7 @@ func (h *TrojanInbound) syncService() error {
 
 // ─── connection handling ─────────────────────────────────────────────────────
 
-func (h *TrojanInbound) NewConnectionEx(ctx context.Context, conn net.Conn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
+func (h *TrojanInbound) NewConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
 	if h.tlsConfig != nil && h.transport == nil {
 		tlsConn, err := tls.ServerHandshake(ctx, conn, h.tlsConfig)
 		if err != nil {
@@ -342,5 +342,5 @@ func (h *trojanTransportHandler) NewConnectionEx(ctx context.Context, conn net.C
 	metadata.InboundDetour = h.listener.ListenOptions().Detour
 	//nolint:staticcheck
 	h.logger.InfoContext(ctx, "inbound connection from ", metadata.Source)
-	(*TrojanInbound)(h).NewConnectionEx(ctx, conn, metadata, onClose)
+	(*TrojanInbound)(h).NewConnection(ctx, conn, metadata, onClose)
 }

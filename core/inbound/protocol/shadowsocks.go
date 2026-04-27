@@ -62,7 +62,7 @@ func newShadowsocksInbound(
 	logger log.ContextLogger,
 	tag string,
 	options option.ShadowsocksInboundOptions,
-) (adapter.Inbound, error) {
+) (*ShadowsocksInbound, error) {
 	h := &ShadowsocksInbound{
 		Adapter: inbound.NewAdapter(C.TypeShadowsocks, tag),
 		ctx:     ctx,
@@ -84,7 +84,7 @@ func newShadowsocksInbound(
 		udpTimeout = C.UDPTimeout
 	}
 
-	upstreamHandler := adapter.NewUpstreamHandler(
+	upstreamHandler := adapter.NewLegacyUpstreamHandler(
 		adapter.InboundContext{},
 		h.newConnection,
 		h.newPacketConnection,
@@ -236,7 +236,7 @@ func (h *ShadowsocksInbound) syncService() error {
 // ─── connection handling ─────────────────────────────────────────────────────
 
 //nolint:staticcheck
-func (h *ShadowsocksInbound) NewConnectionEx(ctx context.Context, conn net.Conn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
+func (h *ShadowsocksInbound) NewConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
 	err := h.service.NewConnection(ctx, conn, adapter.UpstreamMetadata(metadata))
 	N.CloseOnHandshakeFailure(conn, onClose, err)
 	if err != nil {

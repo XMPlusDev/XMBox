@@ -84,7 +84,7 @@ func newVMessInbound(
 	}
 
 	service := vmess.NewService[int](
-		adapter.NewUpstreamContextHandlerEx(h.newConnectionEx, h.newPacketConnectionEx),
+		adapter.NewUpstreamContextHandler(h.newConnectionEx, h.newPacketConnectionEx),
 		serviceOptions...)
 	h.service = service
 
@@ -220,7 +220,7 @@ func (h *VMessInbound) syncService() error {
 	return h.service.UpdateUsers(indices, uuids, alterIds)
 }
 
-func (h *VMessInbound) NewConnectionEx(ctx context.Context, conn net.Conn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
+func (h *VMessInbound) NewConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
 	if h.tlsConfig != nil && h.transport == nil {
 		tlsConn, err := tls.ServerHandshake(ctx, conn, h.tlsConfig)
 		if err != nil {
@@ -298,5 +298,5 @@ func (h *vmessTransportHandler) NewConnectionEx(ctx context.Context, conn net.Co
 	metadata.InboundDetour = h.listener.ListenOptions().Detour
 	//nolint:staticcheck
 	h.logger.InfoContext(ctx, "inbound connection from ", metadata.Source)
-	(*VMessInbound)(h).NewConnectionEx(ctx, conn, metadata, onClose)
+	(*VMessInbound)(h).NewConnection(ctx, conn, metadata, onClose)
 }

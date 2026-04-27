@@ -89,7 +89,7 @@ func newVLESSInbound(
 
 	// Build VLESS service.
 	service := vless.NewService[int](logger,
-		adapter.NewUpstreamContextHandlerEx(h.newConnectionEx, h.newPacketConnectionEx))
+		adapter.NewUpstreamContextHandler(h.newConnectionEx, h.newPacketConnectionEx))
 	h.service = service
 
 	// Load initial users.
@@ -241,7 +241,7 @@ func (h *VLESSInbound) syncService() {
 
 // ─── connection handling ─────────────────────────────────────────────────────
 
-func (h *VLESSInbound) NewConnectionEx(ctx context.Context, conn net.Conn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
+func (h *VLESSInbound) NewConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
 	if h.tlsConfig != nil && h.transport == nil {
 		tlsConn, err := tls.ServerHandshake(ctx, conn, h.tlsConfig)
 		if err != nil {
@@ -322,5 +322,5 @@ func (h *vlessTransportHandler) NewConnectionEx(ctx context.Context, conn net.Co
 	metadata.InboundDetour = h.listener.ListenOptions().Detour
 	//nolint:staticcheck
 	h.logger.InfoContext(ctx, "inbound connection from ", metadata.Source)
-	(*VLESSInbound)(h).NewConnectionEx(ctx, conn, metadata, onClose)
+	(*VLESSInbound)(h).NewConnection(ctx, conn, metadata, onClose)
 }
