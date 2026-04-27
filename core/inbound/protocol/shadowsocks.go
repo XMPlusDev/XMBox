@@ -62,7 +62,7 @@ func newShadowsocksInbound(
 	logger log.ContextLogger,
 	tag string,
 	options option.ShadowsocksInboundOptions,
-) (*ShadowsocksInbound, error) {
+) (adapter.Inbound, error) {
 	h := &ShadowsocksInbound{
 		Adapter: inbound.NewAdapter(C.TypeShadowsocks, tag),
 		ctx:     ctx,
@@ -249,7 +249,7 @@ func (h *ShadowsocksInbound) NewConnection(ctx context.Context, conn net.Conn, m
 }
 
 //nolint:staticcheck
-func (h *ShadowsocksInbound) NewPacketEx(buffer *buf.Buffer, source M.Socksaddr) {
+func (h *ShadowsocksInbound) NewPacket(buffer *buf.Buffer, source M.Socksaddr) {
 	err := h.service.NewPacket(h.ctx, &ssStubPacketConn{h.listener.PacketWriter()}, buffer, M.Metadata{Source: source})
 	if err != nil {
 		h.logger.Error(E.Cause(err, "process packet from ", source))
