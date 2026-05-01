@@ -40,20 +40,13 @@ jobs:
         with:
           go-version: ^1.26.0
 
-      - name: Tidy up dependencies
+      - name: Download dependencies
         run: go mod tidy
 
       - name: Build XMBox
         run: |
           mkdir -p build_assets
           go build -v -o build_assets/XMBox \
-            -tags "sing xray hysteria2 with_quic with_grpc with_utls with_gvisor" \
-            -trimpath -ldflags "-s -w -buildid=" ./main
-
-      - name: Build Mips softfloat XMBox
-        if: matrix.goarch == 'mips' || matrix.goarch == 'mipsle'
-        run: |
-          GOMIPS=softfloat go build -v -o build_assets/XMBox_softfloat \
             -tags "sing xray hysteria2 with_quic with_grpc with_utls with_gvisor" \
             -trimpath -ldflags "-s -w -buildid=" ./main
 
