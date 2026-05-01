@@ -13,32 +13,7 @@ jobs:
     strategy:
       matrix:
         goos: [linux]
-        goarch: [amd64, 386]
-        include:
-          # Linux ARM 5 6 7
-          - goos: linux
-            goarch: arm
-            goarm: 7
-          - goos: linux
-            goarch: arm
-            goarm: 6
-          - goos: linux
-            goarch: arm
-            goarm: 5
-          # ARM64 & riscv64
-          - goos: linux
-            goarch: arm64
-          - goos: linux
-            goarch: riscv64
-          # MIPS
-          - goos: linux
-            goarch: mips64
-          - goos: linux
-            goarch: mips64le
-          - goos: linux
-            goarch: mipsle
-          - goos: linux
-            goarch: mips
+        goarch: [amd64, arm64]
       fail-fast: false
 
     runs-on: ubuntu-24.04
