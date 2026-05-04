@@ -71,6 +71,24 @@ func New(coreInstance *core.Instance, api api.API, config *node.Config) *Control
 	}
 }
 
+func (c *Controller) TriggerNodeSync() {
+	select {
+	case c.nodeSyncTrigger <- struct{}{}:
+	default: 
+	}
+}
+
+func (c *Controller) TriggerSubscriptionSync() {
+	select {
+	case c.subscriptionSyncTrigger <- struct{}{}:
+	default: 
+	}
+}
+
+func (c *Controller) GetNodeID() int {
+	return c.clientInfo.NodeID
+}
+
 func (c *Controller) Start() error {
 	c.clientInfo = c.client.Describe()
 
