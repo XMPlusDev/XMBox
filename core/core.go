@@ -274,7 +274,7 @@ func (i *Instance) webhookHandler(cfg *WebhookConfig) http.HandlerFunc {
 
 		case "subscriptions_updated":
 			log.Printf("[Webhook] Event %q triggered.", event.Event)
-			for nodeID, ctrl := range i.controllerMap {
+			for _, ctrl := range i.controllerMap {
 				ctrl.TriggerSubscriptionSync()
 			}
 
