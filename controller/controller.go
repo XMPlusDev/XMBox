@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/xmplusdev/xmbox/api"
-	"github.com/xmplusdev/xmbox/core"
+	"github.com/xmplusdev/xmbox/core/instance"
 	"github.com/xmplusdev/xmbox/helper/cert"
 	"github.com/xmplusdev/xmbox/helper/rule"
 	"github.com/xmplusdev/xmbox/helper/limiter"
@@ -25,7 +25,7 @@ func getDefaultControllerConfig() *node.Config {
 var _ service.ControllerInterface = (*Controller)(nil)
 
 func init() {
-	core.SetControllerFactory(func(instance *core.Instance, nodeConfig *core.NodesConfig) service.ControllerInterface {
+	instance.SetControllerFactory(func(instance *instance.Instance, nodeConfig *instance.NodesConfig) service.ControllerInterface {
 		apiClient := api.New(nodeConfig.ApiConfig)
 		cfg := getDefaultControllerConfig()
 		if nodeConfig != nil {
@@ -37,7 +37,7 @@ func init() {
 }
 
 type Controller struct {
-	coreInstance     *core.Instance
+	coreInstance     *instance.Instance
 	config           *node.Config
 	clientInfo       api.ClientInfo
 	client           api.API
@@ -55,7 +55,7 @@ type Controller struct {
 	triggerCancel   context.CancelFunc
 }
 
-func New(coreInstance *core.Instance, api api.API, config *node.Config) *Controller {
+func New(coreInstance *instance.Instance, api api.API, config *node.Config) *Controller {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Controller{
 		coreInstance: coreInstance,

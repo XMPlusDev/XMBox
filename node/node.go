@@ -5,14 +5,14 @@ import (
 
 	F "github.com/sagernet/sing/common/format"
 	"github.com/xmplusdev/xmbox/api"
-	"github.com/xmplusdev/xmbox/core"
+	"github.com/xmplusdev/xmbox/core/instance"
 )
 
 type Manager struct {
-	coreInstance *core.Instance
+	coreInstance *instance.Instance
 }
 
-func NewManager(coreInstance *core.Instance) *Manager {
+func NewManager(coreInstance *instance.Instance) *Manager {
 	return &Manager{coreInstance: coreInstance}
 }
 

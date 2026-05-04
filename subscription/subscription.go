@@ -8,18 +8,18 @@ import (
 	"strings"
 
 	"github.com/xmplusdev/xmbox/api"
-	"github.com/xmplusdev/xmbox/core"
+	"github.com/xmplusdev/xmbox/core/instance"
 	"github.com/xmplusdev/xmbox/helper/limiter"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common/auth"
 )
 
 type Manager struct {
-	coreInstance *core.Instance
+	coreInstance *instance.Instance
 	client       api.API
 }
 
-func NewManager(coreInstance *core.Instance, client api.API) *Manager {
+func NewManager(coreInstance *instance.Instance, client api.API) *Manager {
 	return &Manager{coreInstance: coreInstance, client: client}
 }
 

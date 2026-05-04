@@ -16,7 +16,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"github.com/xmplusdev/xmbox/core"
+	"github.com/xmplusdev/xmbox/core/instance"
 	_ "github.com/xmplusdev/xmbox/controller"
 )
 
@@ -108,14 +108,14 @@ func runManager(config *viper.Viper, restartChan chan bool) (err error) {
 		return fmt.Errorf("config is nil")
 	}
 
-	boxConfig := &core.Config{}
+	boxConfig := &instance.Config{}
 	if err := config.Unmarshal(boxConfig); err != nil {
 		return fmt.Errorf("parse config file %q: %w", cfgFile, err)
 	}
 
 	log.SetReportCaller(boxConfig.LogConfig.Level == "debug")
 
-	i := core.New(boxConfig)
+	i := instance.New(boxConfig)
 	if err = startInstanceSafely(i); err != nil {
 		return fmt.Errorf("start instance: %w", err)
 	}
@@ -173,7 +173,7 @@ func formatStack(stack []byte) string {
 	return b.String()
 }
 
-func startInstanceSafely(i *core.Instance) (err error) {
+func startInstanceSafely(i *instance.Instance) (err error) {
 	if i == nil {
 		return fmt.Errorf("instance is nil")
 	}

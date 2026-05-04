@@ -26,14 +26,17 @@ Ntp:
 Multiplex:                                
     Enabled: true                               # true, flase
     Padding: true                               # true, flase
-WebhookConfig:
-  Enable: false                                  # Enable turns the webhook server on.
-  ListenAddr: "0.0.0.0:18887"                    # ListenAddr is the address the HTTP server binds to. "0.0.0.0:18887"
-  Secret: "sha256 hash of api key"               #Secret is the value controllers expect in the X-XMRay-Auth request
+ReverbConfig:
+  - Enable: false
+    Host: "api.xyz.com:443" # Reverb REVERB_HOST:REVERB_PORT  in .env for api /home/XMplusPanel/.env 
+    AppKey:                 # REVERB_APP_KEY in .env for api /home/XMplusPanel/.env
+    AppSecret:              # REVERB_APP_SECRET in .env for api /home/XMplusPanel/.env
+    Channel: xmplus         # Do not change
+    UseTLS: true            # Set to true if tls enabled for api
 Nodes:
   -
     ApiConfig:
-      ApiHost: "https://www.xyz.com"            # Panel api address https://api.tld.com
+      ApiHost: "https://api.xyz.com"            # Panel api address https://api.tld.com
       ApiKey: "123"                             # Panel server api key
       NodeID: 1                                 # Server (Node) id of the server to connect
       Timeout: 30                               # Timeout for backened server to get response from panel api 

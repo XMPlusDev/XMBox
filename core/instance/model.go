@@ -1,4 +1,4 @@
-package core
+package instance
 
 import (
 	"github.com/xmplusdev/xmbox/api"
@@ -12,7 +12,7 @@ type Config struct {
 	DnsConfig          string            `mapstructure:"DnsFile"`
 	RouteConfig        string            `mapstructure:"RouteFile"`
 	NodesConfig        []*NodesConfig    `mapstructure:"Nodes"`
-	WebhookConfig      *WebhookConfig    `mapstructure:"WebhookConfig"`
+	ReverbConfig       []*ReverbConfig   `mapstructure:"ReverbConfig"`
 }
 
 type NodesConfig struct {
@@ -27,10 +27,13 @@ type LogConfig struct {
 	Disabled bool `mapstructure:"Disabled"`
 }
 
-type WebhookConfig struct {
-	Enable 				 bool 	`mapstructure:"Enable"`
-	ListenAddr 			 string `mapstructure:"ListenAddr"`
-	Secret 				 string `mapstructure:"Secret"`
+type ReverbConfig struct {
+    Enable    bool   	`mapstructure:"Enable"`
+    Host      string 	`mapstructure:"Host"`      
+    AppKey    string 	`mapstructure:"AppKey"`   
+	AppSecret string 	`mapstructure:"AppSecret"` 
+    Channel   string 	`mapstructure:"Channel"`   
+    UseTLS    bool   	`mapstructure:"UseTLS"` 
 }
 
 type NtpConfig struct {
