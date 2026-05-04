@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"sync"
+	"time"
 
 	"dario.cat/mergo"
 	box "github.com/sagernet/sing-box"
@@ -18,6 +20,12 @@ import (
 	"github.com/xmplusdev/xmbox/core/inbound"
 	"github.com/xmplusdev/xmbox/service"
 )
+
+type WebhookEvent struct {
+	Event  string          `json:"event"`   // "node_updated" | "users_updated"
+	NodeID int             `json:"node_id"` // routes to the correct controller
+	Data   json.RawMessage `json:"data"`    // reserved for future use
+}
 
 type loadResult struct {
 	server     *box.Box
@@ -34,6 +42,10 @@ type Instance struct {
 	dispatcher *Dispatcher
 	logFactory boxLog.Factory
 	Service    []service.ControllerInterface
+
+	webhookServer *http.Server
+	webhookCancel context.CancelFunc
+	controllerMap map[int]service.TriggerInterface
 }
 
 func New(config *Config) *Instance {
@@ -145,6 +157,13 @@ func (i *Instance) Start() error {
 		i.server.Close()
 		i.server = nil
 	}
+	
+	if i.webhookCancel != nil {
+		i.webhookCancel()
+		i.webhookCancel = nil
+		i.webhookServer = nil
+	}
+	i.controllerMap = make(map[int]service.TriggerInterface)
 
 	i.server = result.server
 	i.ctx = result.ctx
@@ -170,14 +189,113 @@ func (i *Instance) Start() error {
 		if err := s.Start(); err != nil {
 			return fmt.Errorf("start service: %w", err)
 		}
+		
+		if t, ok := s.(service.TriggerInterface); ok {
+			nodeID := t.GetNodeID()
+			if _, exists := i.controllerMap[nodeID]; !exists {
+				i.controllerMap[nodeID] = t
+			}
+		}
+	}
+	
+	if i.config.WebhookConfig != nil && i.config.WebhookConfig.Enable {
+		i.startWebhookServer(i.config.WebhookConfig)
 	}
 
 	return nil
 }
 
+func (i *Instance) startWebhookServer(cfg *WebhookConfig) {
+	ctx, cancel := context.WithCancel(context.Background())
+	i.webhookCancel = cancel
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/webhook", i.webhookHandler(cfg))
+
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	i.webhookServer = &http.Server{
+		Addr:         cfg.ListenAddr,
+		Handler:      mux,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+	}
+
+	go func() {
+		log.Printf("[Webhook] Server listening on %s (%d node(s) registered)",
+			cfg.ListenAddr, len(i.controllerMap))
+		if err := i.webhookServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Printf("[Webhook] Server error: %v", err)
+		}
+	}()
+
+	go func() {
+		<-ctx.Done()
+		shutCtx, shutCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutCancel()
+		if err := i.webhookServer.Shutdown(shutCtx); err != nil {
+			log.Printf("[Webhook] Shutdown error: %v", err)
+		}
+		log.Println("[Webhook] Server stopped")
+	}()
+}
+
+func (i *Instance) webhookHandler(cfg *WebhookConfig) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Shared-secret authentication.
+		if cfg.Secret != "" && r.Header.Get("X-XMBox-Auth") != cfg.Secret {
+			log.Printf("[Webhook] Unauthorized request from %s", r.RemoteAddr)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		// Parse event — payload is intentionally kept small (signal only).
+		var event WebhookEvent
+		if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
+			http.Error(w, "Bad Request", http.StatusBadRequest)
+			return
+		}
+
+		// Route to the controller that owns this node.
+		ctrl, ok := i.controllerMap[event.NodeID]
+		if !ok {
+			log.Printf("[Webhook] Received event %q for unknown NodeID %d — ignoring",
+				event.Event, event.NodeID)
+			// Return 200 so the panel does not endlessly retry.
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		log.Printf("[Webhook] Event %q → NodeID %d", event.Event, event.NodeID)
+
+		switch event.Event {
+		case "node_updated":
+			ctrl.TriggerNodeSync()
+		case "subscriptions_updated":
+			ctrl.TriggerSubscriptionSync()
+		default:
+			log.Printf("[Webhook] Unknown event type %q for NodeID %d", event.Event, event.NodeID)
+		}
+
+		w.WriteHeader(http.StatusOK)
+	}
+}
+
 func (i *Instance) Stop() error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
+
+	if i.webhookCancel != nil {
+		i.webhookCancel()
+		i.webhookCancel = nil
+	}
 
 	for _, s := range i.Service {
 		if err := s.Close(); err != nil {
@@ -185,6 +303,7 @@ func (i *Instance) Stop() error {
 		}
 	}
 	i.Service = nil
+	i.controllerMap = nil
 
 	if i.server != nil {
 		i.server.Close()

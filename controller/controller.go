@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"reflect"
@@ -47,16 +48,26 @@ type Controller struct {
 	taskManager      *task.Manager
 	nodeManager      *node.Manager
 	subManager       *subscription.Manager
+
+	nodeSyncTrigger chan struct{}
+	subscriptionSyncTrigger chan struct{}
+	triggerCtx      context.Context
+	triggerCancel   context.CancelFunc
 }
 
 func New(coreInstance *core.Instance, api api.API, config *node.Config) *Controller {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &Controller{
 		coreInstance: coreInstance,
 		config:      config,
 		client:      api,
 		taskManager: task.NewManager(),
 		nodeManager: node.NewManager(coreInstance),
-		subManager:  subscription.NewManager(coreInstance, api),
+		subManager:  subscription.NewManager(coreInstance, api),        
+		nodeSyncTrigger:         make(chan struct{}, 1),
+		subscriptionSyncTrigger: make(chan struct{}, 1),
+		triggerCtx:              ctx,
+		triggerCancel:           cancel,
 	}
 }
 
@@ -104,18 +115,20 @@ func (c *Controller) Start() error {
 	); err != nil {
 		fmt.Errorf("Controller AddLimiter: %w", err)
 	}
+	
+	pollInterval := c.pollInterval()
 
 	c.taskManager.Add(task.NewWithDelay(
 		c.LogPrefix,
 		"server",
-		time.Duration(c.nodeInfo.UpdateInterval)*time.Second,
-		c.nodeInfoMonitor,
+		pollInterval,
+		c.apiMonitor,
 	))
 
 	c.taskManager.Add(task.NewWithDelay(
 		c.LogPrefix,
 		"subscriptions",
-		time.Duration(c.nodeInfo.UpdateInterval)*time.Second,
+		pollInterval,
 		func() error {
 			return c.subManager.SubscriptionMonitor(c.subscriptionList, c.Tag, c.LogPrefix)
 		},
@@ -124,7 +137,7 @@ func (c *Controller) Start() error {
 	c.taskManager.Add(task.NewWithDelay(
 		c.LogPrefix,
 		"rules",
-		time.Duration(c.nodeInfo.UpdateInterval)*time.Second,
+		pollInterval,
 		c.ruleMonitor,
 	))
 
@@ -132,10 +145,12 @@ func (c *Controller) Start() error {
 		c.taskManager.Add(task.NewWithDelay(
 			c.LogPrefix,
 			"cert renew",
-			time.Duration(c.nodeInfo.UpdateInterval)*time.Second*60,
+			pollInterval*60,
 			c.certMonitor,
 		))
 	}
+	
+	go c.webhookTriggerLoop(pollInterval)
 
 	log.Printf("%s Starting %d task schedulers", c.LogPrefix, c.taskManager.Count())
 	return c.taskManager.StartAll()
@@ -143,7 +158,72 @@ func (c *Controller) Start() error {
 
 func (c *Controller) Close() error {
 	log.Printf("%s Closing %d task schedulers", c.LogPrefix, c.taskManager.Count())
+	
+	c.triggerCancel()
+	
 	return c.taskManager.CloseAll()
+}
+
+func (c *Controller) webhookTriggerLoop(fallbackInterval time.Duration) {
+	const debounceDuration = 3 * time.Second
+
+	ticker := time.NewTicker(fallbackInterval)
+	defer ticker.Stop()
+
+	var lastSync time.Time
+
+	for {
+		select {
+
+		case <-c.triggerCtx.Done():
+			return
+
+		case <-c.nodeSyncTrigger:
+			if time.Since(lastSync) < debounceDuration {
+				log.Printf("%s Webhook node trigger debounced", c.LogPrefix)
+				c.drainChannel(c.nodeSyncTrigger)
+				continue
+			}
+			log.Printf("%s Webhook node trigger: syncing now", c.LogPrefix)
+			if err := c.apiMonitor(); err != nil {
+				log.Printf("%s Webhook node sync error: %v", c.LogPrefix, err)
+			}
+			lastSync = time.Now()
+			c.drainChannel(c.nodeSyncTrigger)
+			ticker.Reset(fallbackInterval)
+
+		case <-c.subscriptionSyncTrigger:
+			if time.Since(lastSync) < debounceDuration {
+				log.Printf("%s Webhook subscription trigger debounced", c.LogPrefix)
+				c.drainChannel(c.subscriptionSyncTrigger)
+				continue
+			}
+			log.Printf("%s Webhook subscription trigger: syncing now", c.LogPrefix)
+			if err := c.apiMonitor(); err != nil {
+				log.Printf("%s Webhook subscription sync error: %v", c.LogPrefix, err)
+			}
+			lastSync = time.Now()
+			c.drainChannel(c.subscriptionSyncTrigger)
+			ticker.Reset(fallbackInterval)
+
+		case <-ticker.C:
+			lastSync = time.Now()
+		}
+	}
+}
+
+func (c *Controller) drainChannel(ch chan struct{}) {
+	for {
+		select {
+		case <-ch:
+		default:
+			return
+		}
+	}
+}
+
+func (c *Controller) pollInterval() time.Duration {
+	return time.Duration(c.nodeInfo.UpdateInterval) * time.Second
 }
 
 func (c *Controller) certMonitor() error {
@@ -179,7 +259,7 @@ func (c *Controller) buildNodeTag() string {
 		c.nodeInfo.ID)
 }
 
-func (c *Controller) nodeInfoMonitor() error {
+func (c *Controller) apiMonitor() error {
 	var err error
 
 	var nodeInfoChanged = true

@@ -12,6 +12,7 @@ type Config struct {
 	DnsConfig          string            `mapstructure:"DnsFile"`
 	RouteConfig        string            `mapstructure:"RouteFile"`
 	NodesConfig        []*NodesConfig    `mapstructure:"Nodes"`
+	WebhookConfig      *WebhookConfig    `mapstructure:"WebhookConfig"`
 }
 
 type NodesConfig struct {
@@ -24,6 +25,12 @@ type LogConfig struct {
 	Level string `mapstructure:"Level"`
 	Output string `mapstructure:"Output"`
 	Disabled bool `mapstructure:"Disabled"`
+}
+
+type WebhookConfig struct {
+	Enable 				 bool 	`mapstructure:"Enable"`
+	ListenAddr 			 string `mapstructure:"ListenAddr"`
+	Secret 				 string `mapstructure:"Secret"`
 }
 
 type NtpConfig struct {

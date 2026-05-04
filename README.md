@@ -26,6 +26,10 @@ Ntp:
 Multiplex:                                
     Enabled: true                               # true, flase
     Padding: true                               # true, flase
+WebhookConfig:
+  Enable: false                                  # Enable turns the webhook server on.
+  ListenAddr: "0.0.0.0:18887"                    # ListenAddr is the address the HTTP server binds to. "0.0.0.0:18887"
+  Secret: "sha256 hash of api key"               #Secret is the value controllers expect in the X-XMRay-Auth request
 Nodes:
   -
     ApiConfig:
