@@ -132,7 +132,7 @@ func newHysteria2Inbound(
 		udpTimeout = C.UDPTimeout
 	}
 
-	service, err := hysteria2.NewService[int](hysteria2.ServiceOptions{
+	hysteriaService, err := hysteria2.NewService[int](hysteria2.ServiceOptions{
 		Context:               ctx,
 		Logger:                logger,
 		BrutalDebug:           options.BrutalDebug,
@@ -158,7 +158,7 @@ func newHysteria2Inbound(
 	if err != nil {
 		return nil, err
 	}
-	h.service = service
+	h.service = hysteriaService
 
 	h.mu.Lock()
 	for _, u := range options.Users {
@@ -291,4 +291,8 @@ func (h *Hysteria2Inbound) userName(index int) string {
 		return ""
 	}
 	return (*snap)[index]
+}
+
+func (h *Hysteria2Inbound) InterfaceUpdated() {
+	h.service.Reset()
 }

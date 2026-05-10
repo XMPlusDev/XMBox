@@ -66,6 +66,8 @@ type Subscription struct {
 	Email     	string 		`json:"email"`
 	Speedlimit 	int    		`json:"speed_limit"`
 	Iplimit    	int    		`json:"ip_limit"`
+	TrafficLimit int64  `json:"traffic_limit"` 
+    UsedTraffic  int64  `json:"used_traffic"`
 }
 
 type NetworkSettings struct {
@@ -147,6 +149,8 @@ type SubscriptionInfo struct {
 	Email     	 string
 	SpeedLimit   uint64
 	IPLimit      int
+	TrafficLimit int64  
+    UsedTraffic  int64 
 }
 
 // Reports Data

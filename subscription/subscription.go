@@ -34,10 +34,10 @@ func (m *Manager) AddSubscriptions(subscriptionInfo *[]api.SubscriptionInfo, nod
 	}
 
 	protocol := strings.ToLower(nodeInfo.Protocol)
-	return m.Add(subscriptionInfo, ib, protocol, nodeInfo.NetworkSettings.Flow, nodeInfo.NetworkSettings.Cipher)
+	return m.Add(subscriptionInfo, ib, protocol, nodeInfo.NetworkSettings.Flow, nodeInfo.NetworkSettings.Cipher, tag)
 }
 
-func (m *Manager) Add(subscriptions *[]api.SubscriptionInfo, ib interface{ Tag() string }, protocol string, flow string, cipher string) error {
+func (m *Manager) Add(subscriptions *[]api.SubscriptionInfo, ib interface{ Tag() string }, protocol string, flow string, cipher string, tag string) error {
 	ibTag := ib.Tag()
 
 	switch protocol {
@@ -48,7 +48,7 @@ func (m *Manager) Add(subscriptions *[]api.SubscriptionInfo, ib interface{ Tag()
 		}
 		out := make([]option.VLESSUser, len(*subscriptions))
 		for i, u := range *subscriptions {
-			out[i] = option.VLESSUser{Name: u.UUID, UUID: u.UUID, Flow: flow}
+			out[i] = option.VLESSUser{Name: buildUserTag(tag, &u), UUID: u.UUID, Flow: flow}
 		}
 		return mgr.AddUsers(out)
 
@@ -59,7 +59,7 @@ func (m *Manager) Add(subscriptions *[]api.SubscriptionInfo, ib interface{ Tag()
 		}
 		out := make([]option.VMessUser, len(*subscriptions))
 		for i, u := range *subscriptions {
-			out[i] = option.VMessUser{Name: u.UUID, UUID: u.UUID}
+			out[i] = option.VMessUser{Name: buildUserTag(tag, &u), UUID: u.UUID}
 		}
 		return mgr.AddUsers(out)
 
@@ -70,7 +70,7 @@ func (m *Manager) Add(subscriptions *[]api.SubscriptionInfo, ib interface{ Tag()
 		}
 		out := make([]option.TrojanUser, len(*subscriptions))
 		for i, u := range *subscriptions {
-			out[i] = option.TrojanUser{Name: u.UUID, Password: u.UUID}
+			out[i] = option.TrojanUser{Name: buildUserTag(tag, &u), Password: u.UUID}
 		}
 		return mgr.AddUsers(out)
 
@@ -81,7 +81,7 @@ func (m *Manager) Add(subscriptions *[]api.SubscriptionInfo, ib interface{ Tag()
 		}
 		out := make([]option.TUICUser, len(*subscriptions))
 		for i, u := range *subscriptions {
-			out[i] = option.TUICUser{Name: u.UUID, UUID: u.UUID, Password: u.UUID}
+			out[i] = option.TUICUser{Name: buildUserTag(tag, &u), UUID: u.UUID, Password: u.UUID}
 		}
 		return mgr.AddUsers(out)
 
@@ -92,7 +92,7 @@ func (m *Manager) Add(subscriptions *[]api.SubscriptionInfo, ib interface{ Tag()
 		}
 		out := make([]option.Hysteria2User, len(*subscriptions))
 		for i, u := range *subscriptions {
-			out[i] = option.Hysteria2User{Name: u.UUID, Password: u.UUID}
+			out[i] = option.Hysteria2User{Name: buildUserTag(tag, &u), Password: u.UUID}
 		}
 		return mgr.AddUsers(out)
 
@@ -103,7 +103,7 @@ func (m *Manager) Add(subscriptions *[]api.SubscriptionInfo, ib interface{ Tag()
 		}
 		out := make([]auth.User, len(*subscriptions))
 		for i, u := range *subscriptions {
-			out[i] = auth.User{Username: u.UUID, Password: u.UUID}
+			out[i] = auth.User{Username: buildUserTag(tag, &u), Password: u.UUID}
 		}
 		return mgr.AddUsers(out)
 
@@ -119,7 +119,7 @@ func (m *Manager) Add(subscriptions *[]api.SubscriptionInfo, ib interface{ Tag()
 				fmt.Errorf("Shadowsocks password for [SID: %d] %s error: ", u.Id, err)
 				continue
 			}
-			out[i] = option.ShadowsocksUser{Name: u.UUID, Password: userPass }
+			out[i] = option.ShadowsocksUser{Name: buildUserTag(tag, &u), Password: userPass }
 		}
 		return mgr.AddUsers(out)
 
@@ -130,7 +130,7 @@ func (m *Manager) Add(subscriptions *[]api.SubscriptionInfo, ib interface{ Tag()
 		}
 		out := make([]option.ShadowTLSUser, len(*subscriptions))
 		for i, u := range *subscriptions {
-			out[i] = option.ShadowTLSUser{Name: u.UUID, Password: u.UUID}
+			out[i] = option.ShadowTLSUser{Name: buildUserTag(tag, &u), Password: u.UUID}
 		}
 		return mgr.AddUsers(out)
 
@@ -141,7 +141,7 @@ func (m *Manager) Add(subscriptions *[]api.SubscriptionInfo, ib interface{ Tag()
 		}
 		out := make([]option.AnyTLSUser, len(*subscriptions))
 		for i, u := range *subscriptions {
-			out[i] = option.AnyTLSUser{Name: u.UUID, Password: u.UUID}
+			out[i] = option.AnyTLSUser{Name: buildUserTag(tag, &u), Password: u.UUID}
 		}
 		return mgr.AddUsers(out)
 
@@ -150,15 +150,19 @@ func (m *Manager) Add(subscriptions *[]api.SubscriptionInfo, ib interface{ Tag()
 	}
 }
 
-func GetUUIDs(subscriptions []api.SubscriptionInfo) []string {
+func buildUserTag(tag string, subscription *api.SubscriptionInfo) string {
+	return fmt.Sprintf("%s|%s|%d", tag, subscription.Email, subscription.Id)
+}
+
+func GetEmails(subscriptions []api.SubscriptionInfo) []string {
 	if len(subscriptions) == 0 {
 		return nil
 	}
-	uuids := make([]string, len(subscriptions))
+	emails := make([]string, len(subscriptions))
 	for i, u := range subscriptions {
-		uuids[i] = u.UUID
+		emails[i] = u.Email
 	}
-	return uuids
+	return emails
 }
 
 func ssPassword(password string, method string) (string, error) {
@@ -182,8 +186,8 @@ func ssPassword(password string, method string) (string, error) {
 	return base64.StdEncoding.EncodeToString([]byte(userKey)), nil
 }
 
-func (m *Manager) RemoveSubscriptions(uuids []string, tag string, protocol string) error {
-	if len(uuids) == 0 {
+func (m *Manager) RemoveSubscriptions(emails []string, tag string, protocol string) error {
+	if len(emails) == 0 {
 		return nil
 	}
 
@@ -194,72 +198,72 @@ func (m *Manager) RemoveSubscriptions(uuids []string, tag string, protocol strin
 
 	protocol = strings.ToLower(protocol)
 
-	if err := m.Remove(ib, protocol, uuids); err != nil {
+	if err := m.Remove(ib, protocol, emails); err != nil {
 		return err
 	}
 
-	for _, u := range uuids {
+	for _, u := range emails {
 		m.coreInstance.GetDispatcher().CloseUserConns(tag, u)
 	}
 	return nil
 }
 
-func (m *Manager) Remove(ib interface{ Tag() string }, protocol string, uuids []string) error {
+func (m *Manager) Remove(ib interface{ Tag() string }, protocol string, emails []string) error {
 	switch protocol {
 	case "vless":
 		mgr, ok := ib.(VLESSUserManager)
 		if !ok {
 			return fmt.Errorf("inbound %q does not implement VLESSUserManager", ib.Tag())
 		}
-		return mgr.DelUsers(uuids)
+		return mgr.DelUsers(emails)
 	case "vmess":
 		mgr, ok := ib.(VMessUserManager)
 		if !ok {
 			return fmt.Errorf("inbound %q does not implement VMessUserManager", ib.Tag())
 		}
-		return mgr.DelUsers(uuids)
+		return mgr.DelUsers(emails)
 	case "trojan":
 		mgr, ok := ib.(TrojanUserManager)
 		if !ok {
 			return fmt.Errorf("inbound %q does not implement TrojanUserManager", ib.Tag())
 		}
-		return mgr.DelUsers(uuids)
+		return mgr.DelUsers(emails)
 	case "tuic":
 		mgr, ok := ib.(TUICUserManager)
 		if !ok {
 			return fmt.Errorf("inbound %q does not implement TUICUserManager", ib.Tag())
 		}
-		return mgr.DelUsers(uuids)
+		return mgr.DelUsers(emails)
 	case "hysteria2":
 		mgr, ok := ib.(Hysteria2UserManager)
 		if !ok {
 			return fmt.Errorf("inbound %q does not implement Hysteria2UserManager", ib.Tag())
 		}
-		return mgr.DelUsers(uuids)
+		return mgr.DelUsers(emails)
 	case "naive":
 		mgr, ok := ib.(NaiveUserManager)
 		if !ok {
 			return fmt.Errorf("inbound %q does not implement NaiveUserManager", ib.Tag())
 		}
-		return mgr.DelUsers(uuids)
+		return mgr.DelUsers(emails)
 	case "shadowsocks":
 		mgr, ok := ib.(ShadowsocksUserManager)
 		if !ok {
 			return fmt.Errorf("inbound %q does not implement ShadowsocksUserManager", ib.Tag())
 		}
-		return mgr.DelUsers(uuids)
+		return mgr.DelUsers(emails)
 	case "shadowtls":
 		mgr, ok := ib.(ShadowTLSUserManager)
 		if !ok {
 			return fmt.Errorf("inbound %q does not implement ShadowTLSUserManager", ib.Tag())
 		}
-		return mgr.DelUsers(uuids)
+		return mgr.DelUsers(emails)
 	case "anytls":
 		mgr, ok := ib.(AnyTLSUserManager)
 		if !ok {
 			return fmt.Errorf("inbound %q does not implement AnyTLSUserManager", ib.Tag())
 		}
-		return mgr.DelUsers(uuids)
+		return mgr.DelUsers(emails)
 	default:
 		return fmt.Errorf("RemoveSubscriptions: unsupported protocol %q", protocol)
 	}
@@ -297,60 +301,62 @@ func CompareSubscriptions(old, new *[]api.SubscriptionInfo) (deleted, added, mod
 			added = append(added, newSub)
 		} else if oldSub.SpeedLimit != newSub.SpeedLimit ||
 			oldSub.IPLimit != newSub.IPLimit ||
-			oldSub.UUID != newSub.UUID {
+			oldSub.UUID != newSub.UUID ||
+			oldSub.TrafficLimit != newSub.TrafficLimit {
 			modified = append(modified, newSub)
 		}
 	}
 
 	return deleted, added, modified
 }
+
 func (m *Manager) SubscriptionMonitor(
-	subscriptionList *[]api.SubscriptionInfo,
-	tag string,
-	logPrefix string,
+    subscriptionList *[]api.SubscriptionInfo,
+    tag string,
+    logPrefix string,
 ) error {
-	var subscriptionTraffic []api.SubscriptionTraffic
-
-	tc, ok := m.coreInstance.GetDispatcher().GetTrafficCounter(tag)
-	if !ok {
-		return nil
-	}
-
-	for _, sub := range *subscriptionList {
-		up := tc.GetUpCount(sub.UUID)
-		down := tc.GetDownCount(sub.UUID)
-
-		if up > 0 || down > 0 {
-			subscriptionTraffic = append(subscriptionTraffic, api.SubscriptionTraffic{
-				Id:       sub.Id,
-				Upload:   up,
-				Download: down,
-			})
-			
-			tc.Reset(sub.UUID)
-		}
-	}
-
-	if len(subscriptionTraffic) > 0 {
-		if err := m.client.ReportTraffic(&subscriptionTraffic); err != nil {
-			log.Print(err)
-		} else {
-			log.Printf("%s Report %d Subscription Traffic Usage Data", logPrefix, len(subscriptionTraffic))
-		}
-	}
-
-	onlineIPs, err := m.GetOnlineIPs(tag)
-	if err != nil {
-		log.Print(err)
-	} else if len(*onlineIPs) > 0 {
-		if err = m.client.ReportOnlineIPs(onlineIPs); err != nil {
-			log.Print(err)
-		} else {
-			log.Printf("%s Report %d Subscription Online IPs Data", logPrefix, len(*onlineIPs))
-		}
-	}
-
-	return nil
+    var subscriptionTraffic []api.SubscriptionTraffic
+ 
+    tc, ok := m.coreInstance.GetDispatcher().GetTrafficCounter(tag)
+    if !ok {
+        return nil
+    }
+ 
+    for _, sub := range *subscriptionList {
+        up := tc.GetUpCount(sub.UUID)
+        down := tc.GetDownCount(sub.UUID)
+ 
+        if up > 0 || down > 0 {
+            subscriptionTraffic = append(subscriptionTraffic, api.SubscriptionTraffic{
+                Id:       sub.Id,
+                Upload:   up,
+                Download: down,
+            })
+ 
+            tc.Reset(sub.UUID)
+        }
+    }
+ 
+    if len(subscriptionTraffic) > 0 {
+        if err := m.client.ReportTraffic(&subscriptionTraffic); err != nil {
+            log.Print(err)
+        } else {
+            log.Printf("%s Report %d Subscription Traffic Usage Data", logPrefix, len(subscriptionTraffic))
+        }
+    }
+ 
+    onlineIPs, err := m.GetOnlineIPs(tag)
+    if err != nil {
+        log.Print(err)
+    } else if len(*onlineIPs) > 0 {
+        if err = m.client.ReportOnlineIPs(onlineIPs); err != nil {
+            log.Print(err)
+        } else {
+            log.Printf("%s Report %d Subscription Online IPs Data", logPrefix, len(*onlineIPs))
+        }
+    }
+ 
+    return nil
 }
 
 func (m *Manager) GetOnlineIPs(tag string) (*[]api.OnlineIP, error) {

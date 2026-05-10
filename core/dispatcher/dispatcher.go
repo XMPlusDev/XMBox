@@ -28,20 +28,98 @@ type Dispatcher struct {
 }
 
 func (d *Dispatcher) GetTrafficCounter(tag string) (*counter.TrafficCounter, bool) {
-    v, ok := d.counter.Load(tag)
-    if !ok {
-        return nil, false
-    }
-    return v.(*counter.TrafficCounter), true
+	v, ok := d.counter.Load(tag)
+	if !ok {
+		return nil, false
+	}
+	return v.(*counter.TrafficCounter), true
 }
 
+type QuotaConn struct {
+	net.Conn
+	tag    string
+	email   string
+	cancel context.CancelFunc
+	once   sync.Once
+}
+
+func (c *QuotaConn) Read(b []byte) (n int, err error) {
+	n, err = c.Conn.Read(b)
+	if n > 0 {
+		if limiter.AddDelta(c.tag, c.email, int64(n), 0) {
+			c.once.Do(func() {
+				c.cancel()
+				c.Conn.Close()
+			})
+			return n, fmt.Errorf("traffic limit exceeded for %s", c.email)
+		}
+	}
+	return
+}
+
+func (c *QuotaConn) Write(b []byte) (n int, err error) {
+	n, err = c.Conn.Write(b)
+	if n > 0 {
+		if limiter.AddDelta(c.tag, c.email, 0, int64(n)) {
+			c.once.Do(func() {
+				c.cancel()
+				c.Conn.Close()
+			})
+			return n, fmt.Errorf("traffic limit exceeded for %s", c.email)
+		}
+	}
+	return
+}
+
+func (c *QuotaConn) Upstream() any { return c.Conn }
+
+type QuotaPacketConn struct {
+	N.PacketConn
+	tag    string
+	email   string
+	cancel context.CancelFunc
+	once   sync.Once
+}
+
+func (c *QuotaPacketConn) ReadFrom(b []byte) (n int, addr net.Addr, err error) {
+	n, addr, err = c.PacketConn.(interface {
+		ReadFrom([]byte) (int, net.Addr, error)
+	}).ReadFrom(b)
+	if n > 0 {
+		if limiter.AddDelta(c.tag, c.email, int64(n), 0) {
+			c.once.Do(func() { c.cancel(); c.PacketConn.Close() })
+			return n, addr, fmt.Errorf("traffic limit exceeded for %s", c.email)
+		}
+	}
+	return
+}
+
+func (c *QuotaPacketConn) WriteTo(b []byte, addr net.Addr) (n int, err error) {
+	n, err = c.PacketConn.(interface {
+		WriteTo([]byte, net.Addr) (int, error)
+	}).WriteTo(b, addr)
+	if n > 0 {
+		if limiter.AddDelta(c.tag, c.email, 0, int64(n)) {
+			c.once.Do(func() { c.cancel(); c.PacketConn.Close() })
+			return n, fmt.Errorf("traffic limit exceeded for %s", c.email)
+		}
+	}
+	return
+}
+
+func (c *QuotaPacketConn) Upstream() any { return c.PacketConn }
+
 func (d *Dispatcher) RoutedConnection(
-	_ context.Context,
+	ctx context.Context,
 	conn net.Conn,
 	m adapter.InboundContext,
 	_ adapter.Rule,
 	_ adapter.Outbound,
 ) net.Conn {
+	if m.User == "" {
+		return conn
+	}
+	
 	l, err := limiter.GetLimiter(m.Inbound)
 	if err != nil {
 		log.Warn("limiter not found for inbound ", m.Inbound, ": ", err)
@@ -50,51 +128,64 @@ func (d *Dispatcher) RoutedConnection(
 
 	ip := m.Source.Addr.String()
 
-	bucket, isSpeedlimited, reject, email := l.CheckLimiter(m.Inbound, m.User, ip)
+	bucket, isSpeedlimited, reject, reason := l.CheckLimiter(m.Inbound, m.User, ip)
 	if reject {
 		conn.Close()
-		logger.Printf(fmt.Sprintf("[%s]: IP limit exceeded for [%s]. (TCP) connection from %s closed", m.Inbound, email, maskIP(ip, 2)))
+		logger.Printf("[%s]: %s [%s]. (TCP) connection from %s closed", m.Inbound, reason, m.User, maskIP(ip, 2))
 		return newDeadConn(conn)
 	}
 	if bucket != nil && isSpeedlimited {
-		conn = rate.NewConn(conn, bucket, bucket) 
+		conn = rate.NewConn(conn, bucket, bucket)
 	}
-	
+
 	r, err := rule.GetRuleManager(m.Inbound)
 	if err == nil {
 		dest := m.Destination.AddrString()
 		if r.CheckRule(m.Inbound, dest) {
 			conn.Close()
-			logger.Printf(fmt.Sprintf("[%s] destination [%s] matched restriction rule, connection closed", m.Inbound, dest))
+			logger.Printf("[%s]: Destination [%s] matched restriction rule, connection closed", m.Inbound, dest)
 			return newDeadConn(conn)
 		}
 	}
 
-	if m.User == "" {
-		return conn
-	}
+	connCtx, cancel := context.WithCancel(ctx)
+	_ = connCtx 
 
 	t := d.getOrCreateCounter(m.Inbound)
+
 	var deregister func()
 	nc := &closeNotifyConn{
 		Conn: conn,
 		onClose: func() {
+			cancel() 
 			if deregister != nil {
 				deregister()
 			}
 		},
 	}
 	deregister = d.tracker.add(m.Inbound, m.User, nc)
-	return counter.NewConnCounter(nc, t.GetCounter(m.User))
+
+	qc := &QuotaConn{
+		Conn:   nc,
+		tag:    m.Inbound,
+		email:   m.User,
+		cancel: cancel,
+	}
+
+	return counter.NewConnCounter(qc, t.GetCounter(m.User))
 }
 
 func (d *Dispatcher) RoutedPacketConnection(
-	_ context.Context,
+	ctx context.Context,
 	conn N.PacketConn,
 	m adapter.InboundContext,
 	_ adapter.Rule,
 	_ adapter.Outbound,
 ) N.PacketConn {
+	if m.User == "" {
+		return conn
+	}
+	
 	l, err := limiter.GetLimiter(m.Inbound)
 	if err != nil {
 		log.Warn("limiter not found for inbound ", m.Inbound, ": ", err)
@@ -103,47 +194,54 @@ func (d *Dispatcher) RoutedPacketConnection(
 
 	ip := m.Source.Addr.String()
 
-	bucket, isSpeedlimited, reject, email := l.CheckLimiter(m.Inbound, m.User, ip)
+	bucket, isSpeedlimited, reject, reason := l.CheckLimiter(m.Inbound, m.User, ip)
 	if reject {
 		conn.Close()
-		logger.Printf(fmt.Sprintf("[%s]: IP limit exceeded for[%s]. (UDP) connection from %s closed", m.Inbound, email, maskIP(ip, 2)))
+		logger.Printf("[%s]: %s [%s]. (UDP) connection from %s closed", m.Inbound, reason, m.User, maskIP(ip, 2))
 		return newDeadPacketConn(conn)
 	}
-
 	if bucket != nil && isSpeedlimited {
 		conn = rate.NewPacketConn(conn, bucket, bucket)
 	}
-	
+
 	r, err := rule.GetRuleManager(m.Inbound)
 	if err == nil {
 		dest := m.Destination.AddrString()
 		if r.CheckRule(m.Inbound, dest) {
 			conn.Close()
-			logger.Printf(fmt.Sprintf("[%s] destination [%s] matched restriction rule, connection closed", m.Inbound, dest))
+			logger.Printf("[%s]: Destination [%s] matched restriction rule, connection closed", m.Inbound, dest)
 			return newDeadPacketConn(conn)
 		}
 	}
 
-	if m.User == "" {
-		return conn
-	}
+	_, cancel := context.WithCancel(ctx)
 
 	t := d.getOrCreateCounter(m.Inbound)
+
 	var deregister func()
 	nc := &closeNotifyPacketConn{
 		PacketConn: conn,
 		onClose: func() {
+			cancel()
 			if deregister != nil {
 				deregister()
 			}
 		},
 	}
 	deregister = d.tracker.add(m.Inbound, m.User, nc)
-	return counter.NewPacketConnCounter(nc, t.GetCounter(m.User))
+
+	qc := &QuotaPacketConn{
+		PacketConn: nc,
+		tag:        m.Inbound,
+		email:       m.User,
+		cancel:     cancel,
+	}
+
+	return counter.NewPacketConnCounter(qc, t.GetCounter(m.User))
 }
 
-func (d *Dispatcher) CloseUserConns(tag, uuid string) {
-	d.tracker.closeAll(tag, uuid)
+func (d *Dispatcher) CloseUserConns(tag, email string) {
+	d.tracker.closeAll(tag, email)
 }
 
 func (d *Dispatcher) DeleteCounter(tag string) {
@@ -169,10 +267,10 @@ type connTracker struct {
 	entries map[string]map[uint64]io.Closer
 }
 
-func connKey(tag, uuid string) string { return tag + "\x00" + uuid }
+func connKey(tag, email string) string { return tag + "\x00" + email }
 
-func (t *connTracker) add(tag, uuid string, c io.Closer) func() {
-	key := connKey(tag, uuid)
+func (t *connTracker) add(tag, email string, c io.Closer) func() {
+	key := connKey(tag, email)
 	id := atomic.AddUint64(&t.counter, 1)
 
 	t.mu.Lock()
@@ -197,14 +295,12 @@ func (t *connTracker) add(tag, uuid string, c io.Closer) func() {
 	}
 }
 
-func (t *connTracker) closeAll(tag, uuid string) {
-	key := connKey(tag, uuid)
-
+func (t *connTracker) closeAll(tag, email string) {
+	key := connKey(tag, email)
 	t.mu.Lock()
 	conns := t.entries[key]
 	delete(t.entries, key)
 	t.mu.Unlock()
-
 	for _, c := range conns {
 		c.Close()
 	}
@@ -221,7 +317,6 @@ func (c *closeNotifyConn) Close() error {
 	c.once.Do(c.onClose)
 	return err
 }
-
 func (c *closeNotifyConn) Upstream() any { return c.Conn }
 
 type closeNotifyPacketConn struct {
@@ -235,49 +330,42 @@ func (c *closeNotifyPacketConn) Close() error {
 	c.once.Do(c.onClose)
 	return err
 }
-
 func (c *closeNotifyPacketConn) Upstream() any { return c.PacketConn }
 
 var errRejected = fmt.Errorf("connection rejected")
 
 type deadConn struct{ net.Conn }
 
-func newDeadConn(c net.Conn) *deadConn           { return &deadConn{c} }
-func (d *deadConn) Read([]byte) (int, error)     { return 0, errRejected }
-func (d *deadConn) Write([]byte) (int, error)    { return 0, errRejected }
-func (d *deadConn) Close() error                 { return nil }
-func (d *deadConn) SetDeadline(time.Time) error  { return nil }
+func newDeadConn(c net.Conn) *deadConn        { return &deadConn{c} }
+func (d *deadConn) Read([]byte) (int, error)  { return 0, errRejected }
+func (d *deadConn) Write([]byte) (int, error) { return 0, errRejected }
+func (d *deadConn) Close() error              { return nil }
+func (d *deadConn) SetDeadline(time.Time) error { return nil }
 
 type deadPacketConn struct{ N.PacketConn }
 
 func newDeadPacketConn(c N.PacketConn) *deadPacketConn { return &deadPacketConn{c} }
-func (d *deadPacketConn) Close() error                 { return nil }
+func (d *deadPacketConn) Close() error                  { return nil }
 
 func maskIP(ipStr string, keepSegments int) string {
-    ip := net.ParseIP(ipStr)
-    if ip == nil {
-        return ipStr
-    }
-    
-    if ip.To4() != nil {
-        parts := strings.Split(ipStr, ".")
-        if len(parts) != 4 {
-            return ipStr
-        }
-        
-        for i := keepSegments; i < 4; i++ {
-            parts[i] = "*"
-        }
-        
-        return strings.Join(parts, ".")
-    }
-	
-    fullIP := ip.String()
-    parts := strings.Split(fullIP, ":")
-    
-    for i := keepSegments; i < len(parts); i++ {
-        parts[i] = "*"
-    }
-    
-    return strings.Join(parts, ":")
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return ipStr
+	}
+	if ip.To4() != nil {
+		parts := strings.Split(ipStr, ".")
+		if len(parts) != 4 {
+			return ipStr
+		}
+		for i := keepSegments; i < 4; i++ {
+			parts[i] = "*"
+		}
+		return strings.Join(parts, ".")
+	}
+	fullIP := ip.String()
+	parts := strings.Split(fullIP, ":")
+	for i := keepSegments; i < len(parts); i++ {
+		parts[i] = "*"
+	}
+	return strings.Join(parts, ":")
 }

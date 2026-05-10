@@ -134,6 +134,8 @@ func (c *Controller) Start() error {
 		fmt.Errorf("Controller AddLimiter: %w", err)
 	}
 	
+	c.checkAndCloseExceeded()
+	
 	pollInterval := c.pollInterval()
 
 	c.taskManager.Add(task.NewWithDelay(
@@ -244,39 +246,6 @@ func (c *Controller) pollInterval() time.Duration {
 	return time.Duration(c.nodeInfo.UpdateInterval) * time.Second
 }
 
-func (c *Controller) certMonitor() error {
-    switch c.nodeInfo.TlsSettings.CertMode {
-    case "dns", "http", "tls":
-        lego, err := cert.New(c.config.CertConfig)
-        if err != nil {
-            log.Printf("%s cert init failed: %v", c.LogPrefix, err)
-            return fmt.Errorf("Controller CertMonitor Init: %w", err)
-        }
-        if _, _, _, err = lego.RenewCert(
-            c.nodeInfo.TlsSettings.CertMode,
-            c.nodeInfo.TlsSettings.ServerName,
-        ); err != nil {
-            log.Printf("%s cert renew failed: %v", c.LogPrefix, err)
-            return fmt.Errorf("Controller CertMonitor Renew: %w", err)
-        }
-    }
-    return nil
-}
-
-func (c *Controller) logPrefix() string {
-	return fmt.Sprintf("[%s] %s(NodeID=%d)",
-		c.clientInfo.APIHost,
-		c.nodeInfo.Protocol,
-		c.nodeInfo.ID)
-}
-
-func (c *Controller) buildNodeTag() string {
-	return fmt.Sprintf("%s_%d_%d",
-		c.nodeInfo.Protocol,
-		c.nodeInfo.ListenPort,
-		c.nodeInfo.ID)
-}
-
 func (c *Controller) apiMonitor() error {
 	var err error
 
@@ -342,15 +311,17 @@ func (c *Controller) apiMonitor() error {
 			fmt.Errorf("Controller NodeInfoMonitor AddLimiter: %w", err)
 			return nil
 		}
+		
+		c.checkAndCloseExceeded()
 	} else if subscriptionChanged {
 		deleted, added, modified := subscription.CompareSubscriptions(c.subscriptionList, newSubscriptionInfo)
 
 		if len(deleted) > 0 {
-			deletedUUID := subscription.GetUUIDs(deleted)
-			if err = c.subManager.RemoveSubscriptions(deletedUUID, c.Tag, c.nodeInfo.Protocol); err != nil {
+			deletedEmails := subscription.GetEmails(deleted)
+			if err = c.subManager.RemoveSubscriptions(deletedEmails, c.Tag, c.nodeInfo.Protocol); err != nil {
 				log.Printf("%s Error removing subscriptions: %v", c.LogPrefix, err)
 			} else {
-				limiter.RemoveSubscriptions(c.Tag, deletedUUID)
+				limiter.RemoveSubscriptions(c.Tag, deletedEmails)
 				log.Printf("%s Removed %d subscription(s)", c.LogPrefix, len(deleted))
 			}
 		}
@@ -363,15 +334,16 @@ func (c *Controller) apiMonitor() error {
 				if err = limiter.UpdateLimiter(c.Tag, &added); err != nil {
 					log.Printf("%s Error updating limiter for new subscriptions: %v", c.LogPrefix, err)
 				}
+				c.checkAndCloseExceeded()
 			}
 		}
 
 		if len(modified) > 0 {
-			deletedUUID := subscription.GetUUIDs(modified)
-			if err = c.subManager.RemoveSubscriptions(deletedUUID, c.Tag, c.nodeInfo.Protocol); err != nil {
+			deletedEmails := subscription.GetEmails(modified)
+			if err = c.subManager.RemoveSubscriptions(deletedEmails, c.Tag, c.nodeInfo.Protocol); err != nil {
 				log.Printf("%s Error removing modified subscriptions: %v", c.LogPrefix, err)
 			} else {
-				limiter.RemoveSubscriptions(c.Tag, deletedUUID)
+				limiter.RemoveSubscriptions(c.Tag, deletedEmails)
 			}
 			if err = c.subManager.AddSubscriptions(&modified, c.nodeInfo, c.Tag); err != nil {
 				log.Printf("%s Error adding modified subscriptions: %v", c.LogPrefix, err)
@@ -379,13 +351,21 @@ func (c *Controller) apiMonitor() error {
 			if err = limiter.UpdateLimiter(c.Tag, &modified); err != nil {
 				log.Printf("%s Error updating limiter for modified subscriptions: %v", c.LogPrefix, err)
 			}
-			
+			c.checkAndCloseExceeded()
 			log.Printf("%s Modified %d subscription(s)", c.LogPrefix, len(modified))
 		}
 	}
 
 	c.subscriptionList = newSubscriptionInfo
 	return nil
+}
+
+func (c *Controller) checkAndCloseExceeded() {
+    exceeded := limiter.CheckTrafficExceeded(c.Tag)
+    for _, email := range exceeded {
+        c.coreInstance.GetDispatcher().CloseUserConns(c.Tag, email)
+        log.Printf("%s Traffic quota exhausted, closing connections for email=%s", c.LogPrefix, email)
+    }
 }
 
 func (c *Controller) ruleMonitor() error {
@@ -405,4 +385,37 @@ func (c *Controller) ruleMonitor() error {
         }
     }
     return nil
+}
+
+func (c *Controller) certMonitor() error {
+    switch c.nodeInfo.TlsSettings.CertMode {
+    case "dns", "http", "tls":
+        lego, err := cert.New(c.config.CertConfig)
+        if err != nil {
+            log.Printf("%s cert init failed: %v", c.LogPrefix, err)
+            return fmt.Errorf("Controller CertMonitor Init: %w", err)
+        }
+        if _, _, _, err = lego.RenewCert(
+            c.nodeInfo.TlsSettings.CertMode,
+            c.nodeInfo.TlsSettings.ServerName,
+        ); err != nil {
+            log.Printf("%s cert renew failed: %v", c.LogPrefix, err)
+            return fmt.Errorf("Controller CertMonitor Renew: %w", err)
+        }
+    }
+    return nil
+}
+
+func (c *Controller) logPrefix() string {
+	return fmt.Sprintf("[%s] %s(NodeID=%d)",
+		c.clientInfo.APIHost,
+		c.nodeInfo.Protocol,
+		c.nodeInfo.ID)
+}
+
+func (c *Controller) buildNodeTag() string {
+	return fmt.Sprintf("%s_%s_%d",
+		c.nodeInfo.Protocol,
+		c.nodeInfo.ListenPort,
+		c.nodeInfo.ID)
 }
