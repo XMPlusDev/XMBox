@@ -23,7 +23,7 @@ require (
 	github.com/anytls/sing-anytls v0.0.11
 	github.com/gofrs/uuid/v5 v5.4.0
 	github.com/gorilla/websocket v1.5.3
-	github.com/sagernet/quic-go v0.59.0-sing-box-mod.4
+	github.com/sagernet/quic-go v0.59.0-sing-box-mod.5
 	github.com/sagernet/sing-quic v0.6.2-0.20260412143638-8f65b6be7cd6
 	github.com/sagernet/sing-shadowsocks v0.2.9
 	github.com/sagernet/sing-shadowtls v0.2.1-0.20250503051639-fcd445d33c11
