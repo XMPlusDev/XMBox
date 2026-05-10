@@ -317,7 +317,7 @@ func (c *Controller) apiMonitor() error {
 		deleted, added, modified := subscription.CompareSubscriptions(c.subscriptionList, newSubscriptionInfo)
 
 		if len(deleted) > 0 {
-			deletedEmails := subscription.GetEmails(deleted)
+			deletedEmails := subscription.GetEmails(deleted, c.Tag)
 			if err = c.subManager.RemoveSubscriptions(deletedEmails, c.Tag, c.nodeInfo.Protocol); err != nil {
 				log.Printf("%s Error removing subscriptions: %v", c.LogPrefix, err)
 			} else {
@@ -339,7 +339,7 @@ func (c *Controller) apiMonitor() error {
 		}
 
 		if len(modified) > 0 {
-			deletedEmails := subscription.GetEmails(modified)
+			deletedEmails := subscription.GetEmails(modified, c.Tag)
 			if err = c.subManager.RemoveSubscriptions(deletedEmails, c.Tag, c.nodeInfo.Protocol); err != nil {
 				log.Printf("%s Error removing modified subscriptions: %v", c.LogPrefix, err)
 			} else {

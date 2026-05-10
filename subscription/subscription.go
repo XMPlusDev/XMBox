@@ -151,16 +151,16 @@ func (m *Manager) Add(subscriptions *[]api.SubscriptionInfo, ib interface{ Tag()
 }
 
 func buildUserTag(tag string, subscription *api.SubscriptionInfo) string {
-	return fmt.Sprintf("%s|%s|%d", tag, subscription.Email, subscription.Id)
+	return fmt.Sprintf("%s_%s", tag, subscription.Email)
 }
 
-func GetEmails(subscriptions []api.SubscriptionInfo) []string {
+func GetEmails(subscriptions []api.SubscriptionInfo, tag string) []string {
 	if len(subscriptions) == 0 {
 		return nil
 	}
 	emails := make([]string, len(subscriptions))
 	for i, u := range subscriptions {
-		emails[i] = u.Email
+		emails[i] = fmt.Sprintf("%s_%s", tag, u.Email)
 	}
 	return emails
 }
