@@ -88,11 +88,15 @@ type NetworkSettings struct {
 	//grpc
 	ServiceName string 		
 	
-	//hysteria
+	//hysteria2
 	ObfsType    string     
 	ObfsPasswd  string		
 	BBRProfile  string    	
 	IgnoreClientBandwidth  bool 
+	RealmServerURL  string
+	RealmToken string
+	RealmID string
+	RealmSTUNServers []string
 	
 	//tuic 
 	CongestionControl string 

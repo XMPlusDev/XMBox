@@ -85,6 +85,10 @@ Nodes:
   "obfs_password": "password",
   "bbr_profile": "standard",
   "ignore_client_bandwidth": true,
+  "realm_server_url": "",
+  "realm_token": "",
+  "realm_id": "",
+  "realm_stun_servers": [],
   //tuic
   "congestion_control": "bbr",
   //naive
@@ -124,6 +128,10 @@ Nodes:
   "obfs_password": "password",
   "bbr_profile": "standard",
   "ignore_client_bandwidth": true,
+  "realm_server_url": "",
+  "realm_token": "",
+  "realm_id": "",
+  "realm_stun_servers": [],
   //tuic
   "congestion_control": "bbr",
   //naive
@@ -159,6 +167,10 @@ Nodes:
   "obfs_password": "password",
   "bbr_profile": "standard",
   "ignore_client_bandwidth": true,
+  "realm_server_url": "",
+  "realm_token": "",
+  "realm_id": "",
+  "realm_stun_servers": [],
   //tuic
   "congestion_control": "bbr",
   //naive
@@ -194,6 +206,10 @@ Nodes:
   "obfs_password": "password",
   "bbr_profile": "standard",
   "ignore_client_bandwidth": true,
+  "realm_server_url": "",
+  "realm_token": "",
+  "realm_id": "",
+  "realm_stun_servers": [],
   //tuic
   "congestion_control": "bbr",
   //naive
@@ -230,6 +246,10 @@ Nodes:
   "obfs_password": "password",
   "bbr_profile": "standard",
   "ignore_client_bandwidth": true,
+  "realm_server_url": "",
+  "realm_token": "",
+  "realm_id": "",
+  "realm_stun_servers": [],
   //tuic
   "congestion_control": "bbr",
   //naive

@@ -213,6 +213,22 @@ func (c *Client) parseNetworkSettings(networkData *simplejson.Json, nodeInfo *No
 		nodeInfo.NetworkSettings.IgnoreClientBandwidth = networkIgnoreBandwidth.MustBool()
 	}
 	
+	networkRealmServerURL, realmServerURLExist := networkData.CheckGet("realm_server_url")
+	if realmServerURLExist {
+		nodeInfo.NetworkSettings.RealmServerURL = networkRealmServerURL.MustString()
+	}
+	networkRealmToken, realmTokenExist := networkData.CheckGet("realm_token")
+	if realmTokenExist {
+		nodeInfo.NetworkSettings.RealmToken = networkRealmToken.MustString()
+	}
+	networkRealmID, realmIDExist := networkData.CheckGet("realm_id")
+	if realmIDExist {
+		nodeInfo.NetworkSettings.RealmID = networkRealmID.MustString()
+	}
+	if realmSTUNServersArray, err := networkData.Get("realm_stun_servers").StringArray(); err == nil {
+		nodeInfo.NetworkSettings.RealmSTUNServers = realmSTUNServersArray
+	}
+	
 	// Vless
 	networkFlow, flowExist := networkData.CheckGet("flow")
 	if flowExist {

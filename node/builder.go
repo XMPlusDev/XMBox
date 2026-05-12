@@ -142,6 +142,21 @@ func getInboundOptions(tag string, nodeInfo *api.NodeInfo, config *Config) (opti
 				Password: nodeInfo.NetworkSettings.ObfsPasswd,
 			}
 		}
+		
+		var realm *option.Hysteria2InboundRealm
+		if nodeInfo.NetworkSettings.RealmServerURL != "" {
+			realm = &option.Hysteria2InboundRealm{
+				Hysteria2Realm: option.Hysteria2Realm{
+					ServerURL: nodeInfo.NetworkSettings.RealmServerURL,
+					Token:     nodeInfo.NetworkSettings.RealmToken,
+					RealmID:   nodeInfo.NetworkSettings.RealmID,
+				},
+			}
+			if len(nodeInfo.NetworkSettings.RealmSTUNServers) > 0 {
+				realm.STUNServers = badoption.Listable[string](nodeInfo.NetworkSettings.RealmSTUNServers)
+			}
+		}
+	
 		in.Type = "hysteria2"
 		in.Options = &option.Hysteria2InboundOptions{
 			ListenOptions:              listen,
@@ -213,7 +228,7 @@ func buildTransport(nodeInfo *api.NodeInfo) (*option.V2RayTransportOptions, erro
 			t.HTTPOptions.Path = nodeInfo.NetworkSettings.Path
 			t.HTTPOptions.Host = badoption.Listable[string]([]string{nodeInfo.NetworkSettings.Host})
 		}
-		return nil, nil
+		return t, nil
 
 	case "ws":
 		t.WebsocketOptions = option.V2RayWebsocketOptions{
