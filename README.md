@@ -274,6 +274,8 @@ Nodes:
     "insecure": false,
     "cert_mode": "http",
     "server_name": "tld.dev",
+	"spoof": "",
+    "spoof_method": "",
     "alpn": [
       "h2",
       "http/1.1"

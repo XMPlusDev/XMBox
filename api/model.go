@@ -30,6 +30,7 @@ type PostData struct {
 type serverConfig struct {
 	server                                  `json:"server"`
 	UpdateInterval   	int 				`json:"update_interval"`
+	Version   	        int 				`json:"api_version"`
 }
 
 type server struct {
