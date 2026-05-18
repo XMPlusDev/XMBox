@@ -26,7 +26,7 @@ require (
 	github.com/sagernet/quic-go v0.59.0-sing-box-mod.5
 	github.com/sagernet/sing-quic v0.6.2-0.20260512113342-74f3e685d5a7
 	github.com/sagernet/sing-shadowsocks v0.2.9
-	github.com/sagernet/sing-shadowtls v0.2.1-0.20250503051639-fcd445d33c11
+	github.com/sagernet/sing-shadowtls v0.2.1
 	github.com/sagernet/sing-vmess v0.2.8-0.20250909125414-3aed155119a1
 	golang.org/x/crypto v0.51.0
 	golang.org/x/net v0.54.0
