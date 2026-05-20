@@ -150,7 +150,7 @@ func (c *Controller) Start() error {
 		"subscriptions",
 		pollInterval,
 		func() error {
-			return c.subManager.SubscriptionMonitor(c.subscriptionList, c.Tag, c.LogPrefix)
+			return c.subManager.SubscriptionMonitor(c.Tag, c.LogPrefix)
 		},
 	))
 	

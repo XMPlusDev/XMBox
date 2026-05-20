@@ -35,80 +35,6 @@ func (d *Dispatcher) GetTrafficCounter(tag string) (*counter.TrafficCounter, boo
 	return v.(*counter.TrafficCounter), true
 }
 
-type QuotaConn struct {
-	net.Conn
-	tag    string
-	email   string
-	cancel context.CancelFunc
-	once   sync.Once
-}
-
-func (c *QuotaConn) Read(b []byte) (n int, err error) {
-	n, err = c.Conn.Read(b)
-	if n > 0 {
-		if limiter.AddDelta(c.tag, c.email, int64(n), 0) {
-			c.once.Do(func() {
-				c.cancel()
-				c.Conn.Close()
-			})
-			return n, fmt.Errorf("traffic limit exceeded for %s", c.email)
-		}
-	}
-	return
-}
-
-func (c *QuotaConn) Write(b []byte) (n int, err error) {
-	n, err = c.Conn.Write(b)
-	if n > 0 {
-		if limiter.AddDelta(c.tag, c.email, 0, int64(n)) {
-			c.once.Do(func() {
-				c.cancel()
-				c.Conn.Close()
-			})
-			return n, fmt.Errorf("traffic limit exceeded for %s", c.email)
-		}
-	}
-	return
-}
-
-func (c *QuotaConn) Upstream() any { return c.Conn }
-
-type QuotaPacketConn struct {
-	N.PacketConn
-	tag    string
-	email   string
-	cancel context.CancelFunc
-	once   sync.Once
-}
-
-func (c *QuotaPacketConn) ReadFrom(b []byte) (n int, addr net.Addr, err error) {
-	n, addr, err = c.PacketConn.(interface {
-		ReadFrom([]byte) (int, net.Addr, error)
-	}).ReadFrom(b)
-	if n > 0 {
-		if limiter.AddDelta(c.tag, c.email, int64(n), 0) {
-			c.once.Do(func() { c.cancel(); c.PacketConn.Close() })
-			return n, addr, fmt.Errorf("traffic limit exceeded for %s", c.email)
-		}
-	}
-	return
-}
-
-func (c *QuotaPacketConn) WriteTo(b []byte, addr net.Addr) (n int, err error) {
-	n, err = c.PacketConn.(interface {
-		WriteTo([]byte, net.Addr) (int, error)
-	}).WriteTo(b, addr)
-	if n > 0 {
-		if limiter.AddDelta(c.tag, c.email, 0, int64(n)) {
-			c.once.Do(func() { c.cancel(); c.PacketConn.Close() })
-			return n, fmt.Errorf("traffic limit exceeded for %s", c.email)
-		}
-	}
-	return
-}
-
-func (c *QuotaPacketConn) Upstream() any { return c.PacketConn }
-
 func (d *Dispatcher) RoutedConnection(
 	ctx context.Context,
 	conn net.Conn,
@@ -165,14 +91,9 @@ func (d *Dispatcher) RoutedConnection(
 	}
 	deregister = d.tracker.add(m.Inbound, m.User, nc)
 
-	qc := &QuotaConn{
-		Conn:   nc,
-		tag:    m.Inbound,
-		email:   m.User,
-		cancel: cancel,
-	}
-
-	return counter.NewConnCounter(qc, t.GetCounter(m.User))
+	return counter.NewConnCounter(nc, t.GetCounter(m.User), func(up, down int64) bool {
+		return limiter.AddDelta(m.Inbound, m.User, up, down)
+	})
 }
 
 func (d *Dispatcher) RoutedPacketConnection(
@@ -230,14 +151,9 @@ func (d *Dispatcher) RoutedPacketConnection(
 	}
 	deregister = d.tracker.add(m.Inbound, m.User, nc)
 
-	qc := &QuotaPacketConn{
-		PacketConn: nc,
-		tag:        m.Inbound,
-		email:       m.User,
-		cancel:     cancel,
-	}
-
-	return counter.NewPacketConnCounter(qc, t.GetCounter(m.User))
+	return counter.NewPacketConnCounter(nc, t.GetCounter(m.User), func(up, down int64) bool {
+		return limiter.AddDelta(m.Inbound, m.User, up, down)
+	})
 }
 
 func (d *Dispatcher) CloseUserConns(tag, email string) {

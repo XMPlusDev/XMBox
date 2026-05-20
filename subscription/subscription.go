@@ -8,10 +8,12 @@ import (
 	"strings"
 
 	"github.com/xmplusdev/xmbox/api"
+	"github.com/xmplusdev/xmbox/helper/counter"
 	"github.com/xmplusdev/xmbox/core/instance"
 	"github.com/xmplusdev/xmbox/helper/limiter"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common/auth"
+	
 )
 
 type Manager struct {
@@ -311,37 +313,21 @@ func CompareSubscriptions(old, new *[]api.SubscriptionInfo) (deleted, added, mod
 }
 
 func (m *Manager) SubscriptionMonitor(
-    subscriptionList *[]api.SubscriptionInfo,
     tag string,
     logPrefix string,
 ) error {
-    var subscriptionTraffic []api.SubscriptionTraffic
- 
     tc, ok := m.coreInstance.GetDispatcher().GetTrafficCounter(tag)
     if !ok {
         return nil
     }
+	subscriptionTraffic := m.DrainDeltas(tag, tc)
  
-    for _, sub := range *subscriptionList {
-        up := tc.GetUpCount(sub.UUID)
-        down := tc.GetDownCount(sub.UUID)
- 
-        if up > 0 || down > 0 {
-            subscriptionTraffic = append(subscriptionTraffic, api.SubscriptionTraffic{
-                Id:       sub.Id,
-                Upload:   up,
-                Download: down,
-            })
- 
-            tc.Reset(sub.UUID)
-        }
-    }
- 
-    if len(subscriptionTraffic) > 0 {
-        if err := m.client.ReportTraffic(&subscriptionTraffic); err != nil {
+    if len(subscriptionTraffic.Result) > 0 {
+        if err := m.client.ReportTraffic(&subscriptionTraffic.Result); err != nil {
             log.Print(err)
         } else {
-            log.Printf("%s Report %d Subscription Traffic Usage Data", logPrefix, len(subscriptionTraffic))
+            log.Printf("%s Report %d Subscription Traffic Usage Data", logPrefix, len(subscriptionTraffic.Result))
+			m.ResetTraffic(subscriptionTraffic)
         }
     }
  
@@ -361,4 +347,12 @@ func (m *Manager) SubscriptionMonitor(
 
 func (m *Manager) GetOnlineIPs(tag string) (*[]api.OnlineIP, error) {
 	return limiter.GetOnlineIPs(tag)
+}
+
+func (m *Manager) DrainDeltas(tag string, tc *counter.TrafficCounter) *limiter.PendingTraffic {
+	return limiter.DrainDeltas(tag, tc)
+}
+
+func (m *Manager) ResetTraffic(pending *limiter.PendingTraffic) {
+	limiter.ResetTraffic(pending)
 }
