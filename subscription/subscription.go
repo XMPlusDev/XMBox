@@ -321,6 +321,9 @@ func (m *Manager) SubscriptionMonitor(
         return nil
     }
 	subscriptionTraffic := m.DrainDeltas(tag, tc)
+	if subscriptionTraffic == nil {
+		return nil 
+	}
  
     if len(subscriptionTraffic.Result) > 0 {
         if err := m.client.ReportTraffic(&subscriptionTraffic.Result); err != nil {
