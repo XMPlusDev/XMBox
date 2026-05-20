@@ -6,7 +6,7 @@ import (
 )
 
 var (
-	version  = `XMBox v2605202`
+	version  = `XMBox v2605210`
 )
 
 func init() {

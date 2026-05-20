@@ -84,7 +84,7 @@ func (l *Limiter) AddLimiter(tag string, expiry int, nodeSpeedLimit uint64, subs
 		inboundInfo.GlobalIPLimit.globalOnlineIP = marshaler.New(cache.New[any](rs))
 		inboundInfo.trafficRedis = rc
 	} else {
-		return fmt.Errorf("[Limiter] : Redis config for 【NodeTAG=%s】 is disabled; traffic quota check, ip limit and node traffic report requires redis to be enabled", tag)
+		return fmt.Errorf("[Limiter] : Redis config for 【NodeTAG=%s】 is disabled; traffic quota check, ip limit requires redis to be enabled", tag)
 	}
 
 	subscriptionMap := new(sync.Map)

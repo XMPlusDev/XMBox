@@ -93,7 +93,7 @@ func (d *Dispatcher) RoutedConnection(
 
 	return counter.NewConnCounter(nc, t.GetCounter(m.User), func(up, down int64) bool {
 		return limiter.AddDelta(m.Inbound, m.User, up, down)
-	})
+	}, m.User)
 }
 
 func (d *Dispatcher) RoutedPacketConnection(
@@ -153,7 +153,7 @@ func (d *Dispatcher) RoutedPacketConnection(
 
 	return counter.NewPacketConnCounter(nc, t.GetCounter(m.User), func(up, down int64) bool {
 		return limiter.AddDelta(m.Inbound, m.User, up, down)
-	})
+	}, m.User)
 }
 
 func (d *Dispatcher) CloseUserConns(tag, email string) {
