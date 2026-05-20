@@ -414,7 +414,7 @@ func (c *Controller) logPrefix() string {
 }
 
 func (c *Controller) buildNodeTag() string {
-	return fmt.Sprintf("%s_%s_%d",
+	return fmt.Sprintf("%s_%d_%d",
 		c.nodeInfo.Protocol,
 		c.nodeInfo.ListenPort,
 		c.nodeInfo.ID)
