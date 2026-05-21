@@ -84,7 +84,7 @@ func (l *Limiter) AddLimiter(tag string, expiry int, nodeSpeedLimit uint64, subs
 		inboundInfo.GlobalIPLimit.globalOnlineIP = marshaler.New(cache.New[any](rs))
 		inboundInfo.trafficRedis = rc
 	} else {
-		return fmt.Errorf("[Limiter] : Redis config for 【NodeTAG=%s】 is disabled; traffic quota check, ip limit requires redis to be enabled", tag)
+	   fmt.Errorf("[Limiter] : Redis config for 【NodeTAG=%s】 is disabled; traffic quota check, ip limit requires redis to be enabled", tag)
 	}
 
 	subscriptionMap := new(sync.Map)
@@ -115,6 +115,10 @@ func (l *Limiter) UpdateLimiter(tag string, updatedSubscriptionList *[]api.Subsc
 		return fmt.Errorf("no such limiter: %s found", tag)
 	}
 	inboundInfo := value.(*InboundInfo)
+	
+	if inboundInfo.trafficRedis == nil || inboundInfo.GlobalIPLimit.config == nil || !inboundInfo.GlobalIPLimit.config.Enable {
+		fmt.Errorf("[Limiter] : Redis config for 【NodeTAG=%s】 is disabled; traffic quota check, ip limit requires redis to be enabled", tag)
+	}
 
 	for _, u := range *updatedSubscriptionList {
 		key := fmt.Sprintf("%s_%s", tag, u.Email)
