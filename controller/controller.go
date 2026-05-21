@@ -37,35 +37,38 @@ func init() {
 }
 
 type Controller struct {
-	coreInstance     *instance.Instance
-	config           *node.Config
-	clientInfo       api.ClientInfo
-	client           api.API
-	nodeInfo         *api.NodeInfo
-	Tag              string
-	LogPrefix        string
-	subscriptionList *[]api.SubscriptionInfo
-	taskManager      *task.Manager
-	nodeManager      *node.Manager
-	subManager       *subscription.Manager
+	coreInstance        *instance.Instance
+	config              *node.Config
+	clientInfo          api.ClientInfo
+	client              api.API
+	nodeInfo            *api.NodeInfo
+	Tag                 string
+	LogPrefix           string
+	currentPollInterval time.Duration
+	subscriptionList    *[]api.SubscriptionInfo
+	taskManager         *task.Manager
+	nodeManager         *node.Manager
+	subManager          *subscription.Manager
 
-	nodeSyncTrigger chan struct{}
+	nodeSyncTrigger         chan struct{}
 	subscriptionSyncTrigger chan struct{}
-	triggerCtx      context.Context
-	triggerCancel   context.CancelFunc
+	intervalChangeCh        chan time.Duration
+	triggerCtx              context.Context
+	triggerCancel           context.CancelFunc
 }
 
 func New(coreInstance *instance.Instance, api api.API, config *node.Config) *Controller {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Controller{
-		coreInstance: coreInstance,
-		config:      config,
-		client:      api,
-		taskManager: task.NewManager(),
-		nodeManager: node.NewManager(coreInstance),
-		subManager:  subscription.NewManager(coreInstance, api),        
+		coreInstance:            coreInstance,
+		config:                  config,
+		client:                  api,
+		taskManager:             task.NewManager(),
+		nodeManager:             node.NewManager(coreInstance),
+		subManager:              subscription.NewManager(coreInstance, api),
 		nodeSyncTrigger:         make(chan struct{}, 1),
 		subscriptionSyncTrigger: make(chan struct{}, 1),
+		intervalChangeCh:        make(chan time.Duration, 1),
 		triggerCtx:              ctx,
 		triggerCancel:           cancel,
 	}
@@ -74,14 +77,14 @@ func New(coreInstance *instance.Instance, api api.API, config *node.Config) *Con
 func (c *Controller) TriggerNodeSync() {
 	select {
 	case c.nodeSyncTrigger <- struct{}{}:
-	default: 
+	default:
 	}
 }
 
 func (c *Controller) TriggerSubscriptionSync() {
 	select {
 	case c.subscriptionSyncTrigger <- struct{}{}:
-	default: 
+	default:
 	}
 }
 
@@ -99,7 +102,7 @@ func (c *Controller) Start() error {
 	c.nodeInfo = newNodeInfo
 	c.Tag = c.buildNodeTag()
 	c.LogPrefix = c.logPrefix()
-	
+
 	if ruleList, err := c.client.GetNodeRule(); err != nil {
 		log.Printf("Get rule list filed: %s", err)
 	} else if len(*ruleList) > 0 {
@@ -133,31 +136,31 @@ func (c *Controller) Start() error {
 	); err != nil {
 		fmt.Errorf("Controller AddLimiter: %w", err)
 	}
-	
+
 	c.checkAndCloseExceeded()
-	
-	pollInterval := c.pollInterval()
+
+	c.currentPollInterval = c.pollInterval()
 
 	c.taskManager.Add(task.NewWithDelay(
 		c.LogPrefix,
-		"server",
-		pollInterval,
+		"node",
+		c.currentPollInterval,
 		c.apiMonitor,
 	))
 
 	c.taskManager.Add(task.NewWithDelay(
 		c.LogPrefix,
 		"subscriptions",
-		pollInterval,
+		c.currentPollInterval,
 		func() error {
 			return c.subManager.SubscriptionMonitor(c.Tag, c.LogPrefix)
 		},
 	))
-	
+
 	c.taskManager.Add(task.NewWithDelay(
 		c.LogPrefix,
 		"rules",
-		pollInterval,
+		c.currentPollInterval,
 		c.ruleMonitor,
 	))
 
@@ -165,12 +168,12 @@ func (c *Controller) Start() error {
 		c.taskManager.Add(task.NewWithDelay(
 			c.LogPrefix,
 			"cert renew",
-			pollInterval*60,
+			c.currentPollInterval*60,
 			c.certMonitor,
 		))
 	}
-	
-	go c.webhookTriggerLoop(pollInterval)
+
+	go c.webhookTriggerLoop(c.currentPollInterval)
 
 	log.Printf("%s Starting %d task schedulers", c.LogPrefix, c.taskManager.Count())
 	return c.taskManager.StartAll()
@@ -178,9 +181,9 @@ func (c *Controller) Start() error {
 
 func (c *Controller) Close() error {
 	log.Printf("%s Closing %d task schedulers", c.LogPrefix, c.taskManager.Count())
-	
+
 	c.triggerCancel()
-	
+
 	return c.taskManager.CloseAll()
 }
 
@@ -197,6 +200,11 @@ func (c *Controller) webhookTriggerLoop(fallbackInterval time.Duration) {
 
 		case <-c.triggerCtx.Done():
 			return
+
+		case newInterval := <-c.intervalChangeCh:
+			ticker.Reset(newInterval)
+			fallbackInterval = newInterval
+			log.Printf("%s Webhook interval updated to %v", c.LogPrefix, newInterval)
 
 		case <-c.nodeSyncTrigger:
 			if time.Since(lastSync) < debounceDuration {
@@ -272,8 +280,9 @@ func (c *Controller) apiMonitor() error {
 			return nil
 		}
 	}
-	
+
 	if nodeInfoChanged && !reflect.DeepEqual(c.nodeInfo, newNodeInfo) {
+
 		oldTag := c.Tag
 		oldNodeInfo := c.nodeInfo
 
@@ -282,7 +291,7 @@ func (c *Controller) apiMonitor() error {
 
 		if err = c.nodeManager.RemoveNode(oldTag); err != nil {
 			log.Printf("%s Failed to remove node: %v", c.LogPrefix, err)
-			c.nodeInfo, c.Tag = oldNodeInfo, oldTag 
+			c.nodeInfo, c.Tag = oldNodeInfo, oldTag
 			return err
 		}
 		c.coreInstance.DeleteCounter(oldTag)
@@ -311,7 +320,27 @@ func (c *Controller) apiMonitor() error {
 			fmt.Errorf("Controller NodeInfoMonitor AddLimiter: %w", err)
 			return nil
 		}
-		
+
+		newInterval := c.pollInterval()
+		if c.currentPollInterval != newInterval {
+			for _, tag := range []string{"node", "subscriptions", "rules"} {
+				if t := c.taskManager.GetTask(tag); t != nil {
+					if err := t.RestartWithInterval(newInterval); err != nil {
+						log.Printf("%s Failed to restart %s task: %v", c.LogPrefix, tag, err)
+					} else {
+						log.Printf("%s %s task  restarted with interval %v", c.LogPrefix, tag, newInterval)
+					}
+				}
+			}
+
+			c.currentPollInterval = newInterval
+
+			select {
+			case c.intervalChangeCh <- newInterval:
+			default:
+			}
+		}
+
 		c.checkAndCloseExceeded()
 	} else if subscriptionChanged {
 		deleted, added, modified := subscription.CompareSubscriptions(c.subscriptionList, newSubscriptionInfo)
@@ -361,49 +390,49 @@ func (c *Controller) apiMonitor() error {
 }
 
 func (c *Controller) checkAndCloseExceeded() {
-    exceeded := limiter.CheckTrafficExceeded(c.Tag)
-    for _, email := range exceeded {
-        c.coreInstance.GetDispatcher().CloseUserConns(c.Tag, email)
-        log.Printf("%s Traffic quota exhausted, closing connections for email=%s", c.LogPrefix, email)
-    }
+	exceeded := limiter.CheckTrafficExceeded(c.Tag)
+	for _, email := range exceeded {
+		c.coreInstance.GetDispatcher().CloseUserConns(c.Tag, email)
+		log.Printf("%s Traffic quota exhausted, closing connections for email=%s", c.LogPrefix, email)
+	}
 }
 
 func (c *Controller) ruleMonitor() error {
-    ruleList, err := c.client.GetNodeRule()
-    if err != nil {
-        if err.Error() == api.RuleNotModified {
-            return nil
-        }
-        log.Printf("%s Failed to get rule list: %s", c.LogPrefix, err)
-        return err
-    }
-    if ruleList != nil && len(*ruleList) > 0 {
-        log.Printf("%s Updating %d node rules", c.LogPrefix, len(*ruleList))
-        if err := rule.UpdateRule(c.Tag, *ruleList); err != nil {
-            log.Printf("%s Failed to update rules: %s", c.LogPrefix, err)
-            return err
-        }
-    }
-    return nil
+	ruleList, err := c.client.GetNodeRule()
+	if err != nil {
+		if err.Error() == api.RuleNotModified {
+			return nil
+		}
+		log.Printf("%s Failed to get rule list: %s", c.LogPrefix, err)
+		return err
+	}
+	if ruleList != nil && len(*ruleList) > 0 {
+		log.Printf("%s Updating %d node rules", c.LogPrefix, len(*ruleList))
+		if err := rule.UpdateRule(c.Tag, *ruleList); err != nil {
+			log.Printf("%s Failed to update rules: %s", c.LogPrefix, err)
+			return err
+		}
+	}
+	return nil
 }
 
 func (c *Controller) certMonitor() error {
-    switch c.nodeInfo.TlsSettings.CertMode {
-    case "dns", "http", "tls":
-        lego, err := cert.New(c.config.CertConfig)
-        if err != nil {
-            log.Printf("%s cert init failed: %v", c.LogPrefix, err)
-            return fmt.Errorf("Controller CertMonitor Init: %w", err)
-        }
-        if _, _, _, err = lego.RenewCert(
-            c.nodeInfo.TlsSettings.CertMode,
-            c.nodeInfo.TlsSettings.ServerName,
-        ); err != nil {
-            log.Printf("%s cert renew failed: %v", c.LogPrefix, err)
-            return fmt.Errorf("Controller CertMonitor Renew: %w", err)
-        }
-    }
-    return nil
+	switch c.nodeInfo.TlsSettings.CertMode {
+	case "dns", "http", "tls":
+		lego, err := cert.New(c.config.CertConfig)
+		if err != nil {
+			log.Printf("%s cert init failed: %v", c.LogPrefix, err)
+			return fmt.Errorf("Controller CertMonitor Init: %w", err)
+		}
+		if _, _, _, err = lego.RenewCert(
+			c.nodeInfo.TlsSettings.CertMode,
+			c.nodeInfo.TlsSettings.ServerName,
+		); err != nil {
+			log.Printf("%s cert renew failed: %v", c.LogPrefix, err)
+			return fmt.Errorf("Controller CertMonitor Renew: %w", err)
+		}
+	}
+	return nil
 }
 
 func (c *Controller) logPrefix() string {
