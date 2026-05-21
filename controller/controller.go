@@ -167,7 +167,7 @@ func (c *Controller) Start() error {
 	if c.nodeInfo.TlsSettings != nil && c.nodeInfo.TlsSettings.Type == "tls" {
 		c.taskManager.Add(task.NewWithDelay(
 			c.LogPrefix,
-			"cert renew",
+			"cert_renew",
 			c.currentPollInterval*60,
 			c.certMonitor,
 		))
@@ -264,7 +264,7 @@ func (c *Controller) apiMonitor() error {
 			nodeInfoChanged = false
 			newNodeInfo = c.nodeInfo
 		} else {
-			fmt.Errorf("Controller NodeInfoMonitor GetNodeInfo: %w", err)
+			fmt.Errorf("Controller APIoMonitor GetNodeInfo: %w", err)
 			return nil
 		}
 	}
@@ -276,7 +276,7 @@ func (c *Controller) apiMonitor() error {
 			subscriptionChanged = false
 			newSubscriptionInfo = c.subscriptionList
 		} else {
-			fmt.Errorf("Controller NodeInfoMonitor GetSubscriptionList: %w", err)
+			fmt.Errorf("Controller APIoMonitor GetSubscriptionList: %w", err)
 			return nil
 		}
 	}
@@ -296,17 +296,17 @@ func (c *Controller) apiMonitor() error {
 		}
 		c.coreInstance.DeleteCounter(oldTag)
 		if err = limiter.DeleteLimiter(oldTag); err != nil {
-			fmt.Errorf("Controller NodeInfoMonitor DeleteLimiter: %w", err)
+			fmt.Errorf("Controller APIoMonitor DeleteLimiter: %w", err)
 		}
 
 		if err = c.nodeManager.AddNode(newNodeInfo, c.Tag, c.config); err != nil {
-			fmt.Errorf("Controller NodeInfoMonitor AddNode: %w", err)
+			fmt.Errorf("Controller APIoMonitor AddNode: %w", err)
 			c.nodeInfo, c.Tag = oldNodeInfo, oldTag
 			return nil
 		}
 
 		if err = c.subManager.AddSubscriptions(newSubscriptionInfo, newNodeInfo, c.Tag); err != nil {
-			fmt.Errorf("Controller NodeInfoMonitor AddSubscriptions: %w", err)
+			fmt.Errorf("Controller APIoMonitor AddSubscriptions: %w", err)
 			return nil
 		}
 
@@ -317,7 +317,7 @@ func (c *Controller) apiMonitor() error {
 			newSubscriptionInfo,
 			c.config.RedisConfig,
 		); err != nil {
-			fmt.Errorf("Controller NodeInfoMonitor AddLimiter: %w", err)
+			fmt.Errorf("Controller APIoMonitor AddLimiter: %w", err)
 			return nil
 		}
 
@@ -410,7 +410,6 @@ func (c *Controller) ruleMonitor() error {
 		log.Printf("%s Updating %d node rules", c.LogPrefix, len(*ruleList))
 		if err := rule.UpdateRule(c.Tag, *ruleList); err != nil {
 			log.Printf("%s Failed to update rules: %s", c.LogPrefix, err)
-			return err
 		}
 	}
 	return nil
@@ -429,7 +428,6 @@ func (c *Controller) certMonitor() error {
 			c.nodeInfo.TlsSettings.ServerName,
 		); err != nil {
 			log.Printf("%s cert renew failed: %v", c.LogPrefix, err)
-			return fmt.Errorf("Controller CertMonitor Renew: %w", err)
 		}
 	}
 	return nil
