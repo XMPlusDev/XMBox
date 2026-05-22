@@ -11,8 +11,8 @@ require (
 	github.com/go-acme/lego/v4 v4.35.2
 	github.com/go-resty/resty/v2 v2.17.2
 	github.com/redis/go-redis/v9 v9.19.0
-	github.com/sagernet/sing v0.8.11-0.20260514083559-7297f9541547
-	github.com/sagernet/sing-box v1.14.0-alpha.24.0.20260519082939-131326f06c0e
+	github.com/sagernet/sing v0.8.11-0.20260514110501-905ad103a4df
+	github.com/sagernet/sing-box v1.14.0-alpha.25
 	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
@@ -24,7 +24,7 @@ require (
 	github.com/gofrs/uuid/v5 v5.4.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/sagernet/quic-go v0.59.0-sing-box-mod.5
-	github.com/sagernet/sing-quic v0.6.2-0.20260512113342-74f3e685d5a7
+	github.com/sagernet/sing-quic v0.6.2-0.20260520073201-c8655743eb6e
 	github.com/sagernet/sing-shadowsocks v0.2.9
 	github.com/sagernet/sing-shadowtls v0.2.1
 	github.com/sagernet/sing-vmess v0.2.8-0.20250909125414-3aed155119a1
@@ -283,9 +283,9 @@ require (
 	github.com/sagernet/sing-cloudflared v0.1.0 // indirect
 	github.com/sagernet/sing-mux v0.3.4 // indirect
 	github.com/sagernet/sing-shadowsocks2 v0.2.1 // indirect
-	github.com/sagernet/sing-tun v0.8.10-0.20260519082826-3540265df4d3 // indirect
+	github.com/sagernet/sing-tun v0.8.10-0.20260520101551-ce2b05a9b67f // indirect
 	github.com/sagernet/smux v1.5.50-sing-box-mod.1 // indirect
-	github.com/sagernet/tailscale v1.92.4-sing-box-1.13-mod.7 // indirect
+	github.com/sagernet/tailscale v1.92.4-sing-box-1.13-mod.7.0.20260521041027-e9a3134eb397 // indirect
 	github.com/sagernet/wireguard-go v0.0.3 // indirect
 	github.com/sagernet/ws v0.0.0-20231204124109-acfe8907c854 // indirect
 	github.com/sagikazarmark/locafero v0.11.0 // indirect

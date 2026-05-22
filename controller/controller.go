@@ -294,10 +294,6 @@ func (c *Controller) apiMonitor() error {
 			c.nodeInfo, c.Tag = oldNodeInfo, oldTag
 			return err
 		}
-		c.coreInstance.DeleteCounter(oldTag)
-		if err = limiter.DeleteLimiter(oldTag); err != nil {
-			fmt.Errorf("Controller APIoMonitor DeleteLimiter: %w", err)
-		}
 
 		if err = c.nodeManager.AddNode(newNodeInfo, c.Tag, c.config); err != nil {
 			fmt.Errorf("Controller APIoMonitor AddNode: %w", err)
@@ -308,16 +304,22 @@ func (c *Controller) apiMonitor() error {
 		if err = c.subManager.AddSubscriptions(newSubscriptionInfo, newNodeInfo, c.Tag); err != nil {
 			fmt.Errorf("Controller APIoMonitor AddSubscriptions: %w", err)
 		}
+		
+		if oldTag != c.Tag {
+			c.coreInstance.DeleteCounter(oldTag)
+			if err := limiter.DeleteLimiter(oldTag); err != nil {
+				return fmt.Errorf("Controller APIoMonitor DeleteLimiter: %w", err)
+			}
 
-		if err = limiter.AddLimiter(
-			c.Tag,
-			newNodeInfo.UpdateInterval,
-			newNodeInfo.SpeedLimit,
-			newSubscriptionInfo,
-			c.config.RedisConfig,
-		); err != nil {
-			fmt.Errorf("Controller APIoMonitor AddLimiter: %w", err)
-			return nil
+			if err := limiter.AddLimiter(
+				c.Tag,
+				newNodeInfo.UpdateInterval,
+				newNodeInfo.SpeedLimit,
+				newSubscriptionInfo,
+				c.config.RedisConfig,
+			); err != nil {
+				fmt.Errorf("Controller APIoMonitor AddLimiter: %w", err)
+			}
 		}
 
 		newInterval := c.pollInterval()
