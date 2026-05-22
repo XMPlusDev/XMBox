@@ -112,7 +112,7 @@ func (l *Limiter) AddLimiter(tag string, expiry int, nodeSpeedLimit uint64, subs
 func (l *Limiter) UpdateLimiter(tag string, updatedSubscriptionList *[]api.SubscriptionInfo) error {
 	value, ok := l.InboundInfo.Load(tag)
 	if !ok {
-		return fmt.Errorf("no such limiter: %s found", tag)
+		return fmt.Errorf("No limiter found for tag %s", tag)
 	}
 	inboundInfo := value.(*InboundInfo)
 	
@@ -147,6 +147,7 @@ func (l *Limiter) UpdateLimiter(tag string, updatedSubscriptionList *[]api.Subsc
 			inboundInfo.BucketHub.Delete(key)
 		}
 	}
+	
 	return nil
 }
 

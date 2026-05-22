@@ -307,7 +307,6 @@ func (c *Controller) apiMonitor() error {
 
 		if err = c.subManager.AddSubscriptions(newSubscriptionInfo, newNodeInfo, c.Tag); err != nil {
 			fmt.Errorf("Controller APIoMonitor AddSubscriptions: %w", err)
-			return nil
 		}
 
 		if err = limiter.AddLimiter(
