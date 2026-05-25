@@ -80,8 +80,11 @@ Nodes:
   // shadowsocks
   "cipher": "aes-128-gcm",
   // hysteria
+  //obfs_type(salamander or gecko)
   "obfs_type": "salamander",
   "obfs_password": "password",
+  "geckoMinPacketSize": 512,
+  "geckoMaxPacketSize": 1200,
   "bbr_profile": "standard",
   "ignore_client_bandwidth": true,
   "realm_server_url": "",
@@ -123,8 +126,11 @@ Nodes:
   // shadowsocks
   "cipher": "aes-128-gcm",
   // hysteria
+  //obfs_type(salamander or gecko)
   "obfs_type": "salamander",
   "obfs_password": "password",
+  "geckoMinPacketSize": 512,
+  "geckoMaxPacketSize": 1200,
   "bbr_profile": "standard",
   "ignore_client_bandwidth": true,
   "realm_server_url": "",
@@ -162,8 +168,11 @@ Nodes:
   // shadowsocks
   "cipher": "aes-128-gcm",
   // hysteria
+  //obfs_type(salamander or gecko)
   "obfs_type": "salamander",
   "obfs_password": "password",
+  "geckoMinPacketSize": 512,
+  "geckoMaxPacketSize": 1200,
   "bbr_profile": "standard",
   "ignore_client_bandwidth": true,
   "realm_server_url": "",
@@ -201,8 +210,11 @@ Nodes:
   // shadowsocks
   "cipher": "aes-128-gcm",
   // hysteria
+  //obfs_type(salamander or gecko)
   "obfs_type": "salamander",
   "obfs_password": "password",
+  "geckoMinPacketSize": 512,
+  "geckoMaxPacketSize": 1200,
   "bbr_profile": "standard",
   "ignore_client_bandwidth": true,
   "realm_server_url": "",
@@ -241,8 +253,11 @@ Nodes:
   // shadowsocks
   "cipher": "aes-128-gcm",
   // hysteria
+  //obfs_type(salamander or gecko)
   "obfs_type": "salamander",
   "obfs_password": "password",
+  "geckoMinPacketSize": 512,
+  "geckoMaxPacketSize": 1200,
   "bbr_profile": "standard",
   "ignore_client_bandwidth": true,
   "realm_server_url": "",

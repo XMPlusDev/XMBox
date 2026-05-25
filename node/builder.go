@@ -141,6 +141,12 @@ func getInboundOptions(tag string, nodeInfo *api.NodeInfo, config *Config) (opti
 				Type:     nodeInfo.NetworkSettings.ObfsType,
 				Password: nodeInfo.NetworkSettings.ObfsPasswd,
 			}
+			if nodeInfo.NetworkSettings.ObfsType == "gecko" {
+				obfs.GeckoOptions = option.Hysteria2ObfsGecko {
+					MinPacketSize: nodeInfo.NetworkSettings.GeckoMinPacketSize,
+					MaxPacketSize: nodeInfo.NetworkSettings.GeckoMaxPacketSize,
+				}
+			}
 		}
 		
 		var realm *option.Hysteria2InboundRealm
@@ -164,6 +170,7 @@ func getInboundOptions(tag string, nodeInfo *api.NodeInfo, config *Config) (opti
 			Obfs:                       obfs,
 			BBRProfile:                 nodeInfo.NetworkSettings.BBRProfile,
 			InboundTLSOptionsContainer: option.InboundTLSOptionsContainer{TLS: &tls},
+			Realm:                      realm,
 		}
 
 	case "naive":

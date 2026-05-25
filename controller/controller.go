@@ -183,6 +183,8 @@ func (c *Controller) Close() error {
 	log.Printf("%s Closing %d task schedulers", c.LogPrefix, c.taskManager.Count())
 
 	c.triggerCancel()
+	
+	limiter.DeleteLimiter(c.Tag)
 
 	return c.taskManager.CloseAll()
 }
@@ -294,6 +296,8 @@ func (c *Controller) apiMonitor() error {
 			c.nodeInfo, c.Tag = oldNodeInfo, oldTag
 			return err
 		}
+		
+		c.LogPrefix = c.logPrefix()
 
 		if err = c.nodeManager.AddNode(newNodeInfo, c.Tag, c.config); err != nil {
 			fmt.Errorf("Controller APIoMonitor AddNode: %w", err)
@@ -319,6 +323,24 @@ func (c *Controller) apiMonitor() error {
 				c.config.RedisConfig,
 			); err != nil {
 				fmt.Errorf("Controller APIoMonitor AddLimiter: %w", err)
+			}
+		}else{
+			deleted, added, modified := subscription.CompareSubscriptions(c.subscriptionList, newSubscriptionInfo)
+			if len(deleted) > 0 {
+				deletedEmail := subscription.GetEmails(deleted, oldTag)
+				limiter.RemoveSubscriptions(oldTag, deletedEmail)
+			}
+			if len(added) > 0 {
+				if err := limiter.UpdateLimiter(oldTag, &added); err != nil {
+					log.Printf("%s Error updating limiter for new subscriptions: %v", c.LogPrefix, err)
+				}
+			}
+			if len(modified) > 0 {
+				deletedEmail := subscription.GetEmails(modified, oldTag)
+				limiter.RemoveSubscriptions(oldTag, deletedEmail)
+				if err := limiter.UpdateLimiter(oldTag, &modified); err != nil {
+					log.Printf("%s Error updating limiter for new subscriptions: %v", c.LogPrefix, err)
+				}
 			}
 		}
 

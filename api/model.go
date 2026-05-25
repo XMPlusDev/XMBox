@@ -91,7 +91,9 @@ type NetworkSettings struct {
 	
 	//hysteria2
 	ObfsType    string     
-	ObfsPasswd  string		
+	ObfsPasswd  string	
+	GeckoMinPacketSize int
+    GeckoMaxPacketSize int	
 	BBRProfile  string    	
 	IgnoreClientBandwidth  bool 
 	RealmServerURL  string

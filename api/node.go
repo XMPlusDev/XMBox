@@ -232,6 +232,12 @@ func (c *Client) parseNetworkSettings(networkData *simplejson.Json, nodeInfo *No
 	if realmSTUNServersArray, err := networkData.Get("realm_stun_servers").StringArray(); err == nil {
 		nodeInfo.NetworkSettings.RealmSTUNServers = realmSTUNServersArray
 	}
+	if v, err := networkData.Get("geckoMinPacketSize").Int(); err == nil {
+		nodeInfo.NetworkSettings.GeckoMinPacketSize = v
+	}
+	if v, err := networkData.Get("geckoMaxPacketSize").Int(); err == nil {
+		nodeInfo.NetworkSettings.GeckoMaxPacketSize = v
+	}
 	
 	// Vless
 	networkFlow, flowExist := networkData.CheckGet("flow")
