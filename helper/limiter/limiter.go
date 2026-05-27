@@ -236,17 +236,16 @@ func (l *Limiter) CheckLimiter(tag, email, ip string) (*rate.Limiter, bool, bool
 	}
 
 	limit := determineRate(inboundInfo.NodeSpeedLimit, speedLimit)
-	if limit == 0 {
+	if limit > 0 {
+		lim := rate.NewLimiter(rate.Limit(limit), int(limit))
+		if v, loaded := inboundInfo.BucketHub.LoadOrStore(email, lim); loaded {
+			return v.(*rate.Limiter), true, false, ""
+		}
+		return lim, true, false, ""
+	}else{
 		return nil, false, false, ""
 	}
-	if v, ok := inboundInfo.BucketHub.Load(email); ok {
-		return v.(*rate.Limiter), true, false, ""
-	}
-	lim := rate.NewLimiter(rate.Limit(limit), int(limit))
-	if v, loaded := inboundInfo.BucketHub.LoadOrStore(email, lim); loaded {
-		return v.(*rate.Limiter), true, false, ""
-	}
-	return lim, true, false, ""
+	return nil, false, false, ""
 }
 
 func (l *Limiter) AddDelta(tag, email string, upload, download int64) bool {
