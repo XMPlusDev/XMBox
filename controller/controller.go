@@ -137,8 +137,6 @@ func (c *Controller) Start() error {
 		fmt.Errorf("Controller AddLimiter: %w", err)
 	}
 
-	c.checkAndCloseExceeded()
-
 	c.currentPollInterval = c.pollInterval()
 
 	c.taskManager.Add(task.NewWithDelay(
@@ -363,8 +361,6 @@ func (c *Controller) apiMonitor() error {
 			default:
 			}
 		}
-
-		c.checkAndCloseExceeded()
 	} else if subscriptionChanged {
 		deleted, added, modified := subscription.CompareSubscriptions(c.subscriptionList, newSubscriptionInfo)
 
@@ -386,7 +382,6 @@ func (c *Controller) apiMonitor() error {
 				if err = limiter.UpdateLimiter(c.Tag, &added); err != nil {
 					log.Printf("%s Error updating limiter for new subscriptions: %v", c.LogPrefix, err)
 				}
-				c.checkAndCloseExceeded()
 			}
 		}
 
@@ -403,21 +398,12 @@ func (c *Controller) apiMonitor() error {
 			if err = limiter.UpdateLimiter(c.Tag, &modified); err != nil {
 				log.Printf("%s Error updating limiter for modified subscriptions: %v", c.LogPrefix, err)
 			}
-			c.checkAndCloseExceeded()
 			log.Printf("%s Modified %d subscription(s)", c.LogPrefix, len(modified))
 		}
 	}
 
 	c.subscriptionList = newSubscriptionInfo
 	return nil
-}
-
-func (c *Controller) checkAndCloseExceeded() {
-	exceeded := limiter.CheckTrafficExceeded(c.Tag)
-	for _, email := range exceeded {
-		c.coreInstance.GetDispatcher().CloseUserConns(c.Tag, email)
-		log.Printf("%s Traffic quota exhausted, closing connections for email=%s", c.LogPrefix, email)
-	}
 }
 
 func (c *Controller) ruleMonitor() error {

@@ -91,9 +91,7 @@ func (d *Dispatcher) RoutedConnection(
 	}
 	deregister = d.tracker.add(m.Inbound, m.User, nc)
 
-	return counter.NewConnCounter(nc, t.GetCounter(m.User), func(up, down int64) bool {
-		return limiter.AddDelta(m.Inbound, m.User, up, down)
-	}, m.User)
+	return counter.NewConnCounter(nc, t.GetCounter(m.User))
 }
 
 func (d *Dispatcher) RoutedPacketConnection(
@@ -151,9 +149,7 @@ func (d *Dispatcher) RoutedPacketConnection(
 	}
 	deregister = d.tracker.add(m.Inbound, m.User, nc)
 
-	return counter.NewPacketConnCounter(nc, t.GetCounter(m.User), func(up, down int64) bool {
-		return limiter.AddDelta(m.Inbound, m.User, up, down)
-	}, m.User)
+	return counter.NewPacketConnCounter(nc, t.GetCounter(m.User))
 }
 
 func (d *Dispatcher) CloseUserConns(tag, email string) {

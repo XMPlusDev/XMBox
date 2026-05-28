@@ -303,8 +303,7 @@ func CompareSubscriptions(old, new *[]api.SubscriptionInfo) (deleted, added, mod
 			added = append(added, newSub)
 		} else if oldSub.SpeedLimit != newSub.SpeedLimit ||
 			oldSub.IPLimit != newSub.IPLimit ||
-			oldSub.UUID != newSub.UUID ||
-			oldSub.TrafficLimit != newSub.TrafficLimit {
+			oldSub.UUID != newSub.UUID {
 			modified = append(modified, newSub)
 		}
 	}

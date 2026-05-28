@@ -1,18 +1,14 @@
 package counter
 
 import (
-	"fmt"
 	"io"
 	"net"
-	"sync"
 	
 	"github.com/sagernet/sing/common/buf"
 	"github.com/sagernet/sing/common/bufio"
 	M "github.com/sagernet/sing/common/metadata"
 	"github.com/sagernet/sing/common/network"
 )
-
-type DeltaFunc func(upload, download int64) bool
 
 // ─── TCP ─────────────────────────────────────────────────────────────────────
 
@@ -21,19 +17,14 @@ type ConnCounter struct {
 	storage   *TrafficStorage
 	readFunc  network.CountFunc
 	writeFunc network.CountFunc
-	delta     DeltaFunc  // nil = no quota enforcement
-	email     string
-	closeOnce sync.Once
 }
 
-func NewConnCounter(conn net.Conn, s *TrafficStorage, delta DeltaFunc, email string) net.Conn {
+func NewConnCounter(conn net.Conn, s *TrafficStorage) net.Conn {
 	return &ConnCounter{
 		ExtendedConn: bufio.NewExtendedConn(conn),
 		storage:      s,
 		readFunc:     func(n int64) { s.UpCounter.Add(n) },
 		writeFunc:    func(n int64) { s.DownCounter.Add(n) },
-		delta:        delta,
-		email:        email,
 	}
 }
 
@@ -41,10 +32,6 @@ func (c *ConnCounter) Read(b []byte) (n int, err error) {
 	n, err = c.ExtendedConn.Read(b)
 	if n > 0 {
 		c.storage.UpCounter.Add(int64(n))
-		if c.delta != nil && c.delta(int64(n), 0) {
-			c.closeOnce.Do(func() { c.ExtendedConn.Close() })
-			return n, fmt.Errorf("traffic quota exceeded for %s", c.email)
-		}
 	}
 	return
 }
@@ -53,10 +40,6 @@ func (c *ConnCounter) Write(b []byte) (n int, err error) {
 	n, err = c.ExtendedConn.Write(b)
 	if n > 0 {
 		c.storage.DownCounter.Add(int64(n))
-		if c.delta != nil && c.delta(0, int64(n)) {
-			c.closeOnce.Do(func() { c.ExtendedConn.Close() })
-			return n, fmt.Errorf("traffic quota exceeded for %s", c.email)
-		}
 	}
 	return
 }
@@ -68,10 +51,6 @@ func (c *ConnCounter) ReadBuffer(buffer *buf.Buffer) error {
 	if buffer.Len() > 0 {
 		n := int64(buffer.Len())
 		c.storage.UpCounter.Add(n)
-		if c.delta != nil && c.delta(n, 0) {
-			c.closeOnce.Do(func() { c.ExtendedConn.Close() })
-			return fmt.Errorf("traffic quota exceeded for %s", c.email)
-		}
 	}
 	return nil
 }
@@ -83,10 +62,6 @@ func (c *ConnCounter) WriteBuffer(buffer *buf.Buffer) error {
 	}
 	if n > 0 {
 		c.storage.DownCounter.Add(n)
-		if c.delta != nil && c.delta(0, n) {
-			c.closeOnce.Do(func() { c.ExtendedConn.Close() })
-			return fmt.Errorf("traffic quota exceeded for %s", c.email)
-		}
 	}
 	return nil
 }
@@ -106,19 +81,14 @@ type PacketConnCounter struct {
 	storage   *TrafficStorage
 	readFunc  network.CountFunc
 	writeFunc network.CountFunc
-	delta     DeltaFunc
-	email     string
-	closeOnce sync.Once
 }
 
-func NewPacketConnCounter(conn network.PacketConn, s *TrafficStorage, delta DeltaFunc, email string) network.PacketConn {
+func NewPacketConnCounter(conn network.PacketConn, s *TrafficStorage) network.PacketConn {
 	return &PacketConnCounter{
 		PacketConn: conn,
 		storage:    s,
 		readFunc:   func(n int64) { s.UpCounter.Add(n) },
 		writeFunc:  func(n int64) { s.DownCounter.Add(n) },
-		delta:      delta,
-		email:      email,
 	}
 }
 
@@ -130,10 +100,6 @@ func (p *PacketConnCounter) ReadPacket(buffer *buf.Buffer) (M.Socksaddr, error) 
 	if buffer.Len() > 0 {
 		n := int64(buffer.Len())
 		p.storage.UpCounter.Add(n)
-		if p.delta != nil && p.delta(n, 0) {
-			p.closeOnce.Do(func() { p.PacketConn.Close() })
-			return dest, fmt.Errorf("traffic quota exceeded for %s", p.email)
-		}
 	}
 	return dest, nil
 }
@@ -145,10 +111,6 @@ func (p *PacketConnCounter) WritePacket(buffer *buf.Buffer, dest M.Socksaddr) er
 	}
 	if n > 0 {
 		p.storage.DownCounter.Add(n)
-		if p.delta != nil && p.delta(0, n) {
-			p.closeOnce.Do(func() { p.PacketConn.Close() })
-			return fmt.Errorf("traffic quota exceeded for %s", p.email)
-		}
 	}
 	return nil
 }
