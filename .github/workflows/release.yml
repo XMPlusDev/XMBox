@@ -51,9 +51,9 @@ jobs:
         run: |
           set -e
 
-          cp ${GITHUB_WORKSPACE}/main/files/config.yaml ./build_assets/config.yaml
-          cp ${GITHUB_WORKSPACE}/main/files/dns.json    ./build_assets/dns.json
-          cp ${GITHUB_WORKSPACE}/main/files/route.json  ./build_assets/route.json
+          cp ${GITHUB_WORKSPACE}/files/config.yaml ./build_assets/config.yaml
+          cp ${GITHUB_WORKSPACE}/files/dns.json    ./build_assets/dns.json
+          cp ${GITHUB_WORKSPACE}/files/route.json  ./build_assets/route.json
 
           LIST=('sing-geoip geoip-cn' 'sing-geosite geosite-cn' 'sing-geosite geosite-category-ads-all')
 
