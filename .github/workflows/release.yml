@@ -45,7 +45,7 @@ jobs:
           mkdir -p build_assets
           go build -v -o build_assets/XMBox \
             -tags "sing xray hysteria2 with_quic with_grpc with_utls with_gvisor" \
-            -trimpath -ldflags "-s -w -buildid=" ./main
+            -trimpath -ldflags "-s -w -buildid=" .
 
       - name: Prepare to release
         run: |
