@@ -197,6 +197,17 @@ func (c *Controller) Close() error {
 	if err := limiter.DeleteLimiter(c.Tag); err != nil {
 		log.Printf("%s DeleteLimiter error: %v", c.LogPrefix, err)
 	}
+	if err := c.nodeManager.RemoveNode(c.Tag); err != nil {
+		log.Printf("%s Close RemoveNode error: %v", c.LogPrefix, err)
+	}
+	if c.Relay {
+		if err := c.nodeManager.RemoveRelayRules(c.RelayTag, c.subscriptionList); err != nil {
+			log.Printf("%s Close RemoveRelayRules error: %v", c.LogPrefix, err)
+		}
+		if err := c.nodeManager.RemoveRelayTag(c.RelayTag, c.subscriptionList); err != nil {
+			log.Printf("%s Close RemoveRelayTag error: %v", c.LogPrefix, err)
+		}
+	}
 	return c.taskManager.CloseAll()
 }
 

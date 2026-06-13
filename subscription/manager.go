@@ -244,6 +244,7 @@ func (m *Manager) SubscriptionMonitor(tag, logPrefix string, pusher func(string,
 
 	pending := limiter.DrainDeltas(tag, tc)
 	if pending != nil && len(pending.Result) > 0 {
+		pushed := false
 		if pusher != nil {
 			traffic := make([]api.Traffic, len(pending.Result))
 			for idx, t := range pending.Result {
@@ -254,12 +255,16 @@ func (m *Manager) SubscriptionMonitor(tag, logPrefix string, pusher func(string,
 			} else {
 				limiter.ResetTraffic(pending)
 				log.Printf("%s Pushed %d Traffic Usage Data via Reverb", logPrefix, len(pending.Result))
+				pushed = true
 			}
-		} else if err := m.client.ReportTraffic(&pending.Result); err != nil {
-			log.Print(err)
-		} else {
-			log.Printf("%s Report %d Subscription Traffic Usage Data", logPrefix, len(pending.Result))
-			limiter.ResetTraffic(pending)
+		}
+		if !pushed {
+			if err := m.client.ReportTraffic(&pending.Result); err != nil {
+				log.Print(err)
+			} else {
+				log.Printf("%s Report %d Subscription Traffic Usage Data", logPrefix, len(pending.Result))
+				limiter.ResetTraffic(pending)
+			}
 		}
 	}
 
@@ -267,6 +272,7 @@ func (m *Manager) SubscriptionMonitor(tag, logPrefix string, pusher func(string,
 	if err != nil {
 		log.Print(err)
 	} else if onlineIPs != nil && len(*onlineIPs) > 0 {
+		pushed := false
 		if pusher != nil {
 			aliveIPs := make([]api.AliveIP, len(*onlineIPs))
 			for idx, ip := range *onlineIPs {
@@ -276,11 +282,15 @@ func (m *Manager) SubscriptionMonitor(tag, logPrefix string, pusher func(string,
 				log.Printf("%s Failed to push online IPs via Reverb: %v", logPrefix, err)
 			} else {
 				log.Printf("%s Pushed %d Online IPs Data via Reverb", logPrefix, len(*onlineIPs))
+				pushed = true
 			}
-		} else if err = m.client.ReportOnlineIPs(onlineIPs); err != nil {
-			log.Print(err)
-		} else {
-			log.Printf("%s Report %d Subscription Online IPs Data", logPrefix, len(*onlineIPs))
+		}
+		if !pushed {
+			if err = m.client.ReportOnlineIPs(onlineIPs); err != nil {
+				log.Print(err)
+			} else {
+				log.Printf("%s Report %d Subscription Online IPs Data", logPrefix, len(*onlineIPs))
+			}
 		}
 	}
 
