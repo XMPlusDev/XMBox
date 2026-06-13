@@ -64,7 +64,22 @@ func (s *reverbSession) push(event string, data any) error {
 	if s.closed {
 		return fmt.Errorf("reverb session closed")
 	}
+	s.conn.SetWriteDeadline(time.Now().Add(reverbWriteTimeout))
 	return s.conn.WriteMessage(websocket.TextMessage, b)
+}
+
+const reverbWriteTimeout = 10 * time.Second
+
+// send writes a raw message to the connection under the session lock, with a
+// write deadline so a stalled TCP connection doesn't block forever.
+func (s *reverbSession) send(messageType int, b []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return fmt.Errorf("reverb session closed")
+	}
+	s.conn.SetWriteDeadline(time.Now().Add(reverbWriteTimeout))
+	return s.conn.WriteMessage(messageType, b)
 }
 
 // reverbListener maintains a persistent WebSocket connection to a Reverb server.
@@ -112,7 +127,7 @@ func (i *Instance) reverbListener(ctx context.Context, cfg *ReverbConfig) {
 		i.currentPusher = sess.push
 		i.mu.Unlock()
 
-		if err := i.runReverbSession(ctx, conn, cfg, pingInterval); err != nil {
+		if err := i.runReverbSession(ctx, conn, cfg, pingInterval, sess); err != nil {
 			log.Printf("[Reverb] session ended: %v — reconnecting in %s", err, backoff)
 		}
 
@@ -135,7 +150,7 @@ func (i *Instance) reverbListener(ctx context.Context, cfg *ReverbConfig) {
 	}
 }
 
-func (i *Instance) runReverbSession(ctx context.Context, conn *websocket.Conn, cfg *ReverbConfig, pingInterval time.Duration) error {
+func (i *Instance) runReverbSession(ctx context.Context, conn *websocket.Conn, cfg *ReverbConfig, pingInterval time.Duration, sess *reverbSession) error {
 	socketID, err := awaitConnected(conn)
 	if err != nil {
 		return fmt.Errorf("await connected: %w", err)
@@ -149,7 +164,7 @@ func (i *Instance) runReverbSession(ctx context.Context, conn *websocket.Conn, c
 		Event: "pusher:subscribe",
 		Data:  mustMarshal(subData),
 	})
-	if err := conn.WriteMessage(websocket.TextMessage, sub); err != nil {
+	if err := sess.send(websocket.TextMessage, sub); err != nil {
 		return fmt.Errorf("subscribe: %w", err)
 	}
 
@@ -177,14 +192,14 @@ func (i *Instance) runReverbSession(ctx context.Context, conn *websocket.Conn, c
 	for {
 		select {
 		case <-ctx.Done():
-			conn.WriteMessage(websocket.CloseMessage,
+			sess.send(websocket.CloseMessage,
 				websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 			return nil
 		case err := <-readErr:
 			return err
 		case <-ping.C:
 			p, _ := json.Marshal(pusherMessage{Event: "pusher:ping", Data: mustMarshal(map[string]any{})})
-			if err := conn.WriteMessage(websocket.TextMessage, p); err != nil {
+			if err := sess.send(websocket.TextMessage, p); err != nil {
 				return fmt.Errorf("ping: %w", err)
 			}
 		case msg := <-msgs:
