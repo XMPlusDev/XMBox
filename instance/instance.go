@@ -244,9 +244,9 @@ func (i *Instance) startServerMode(rootClient api.API) error {
 		_ = nodeClient // ForNode used above; ref kept to avoid unused import warning
 	}
 
+	i.startServerStatusTask(rootClient)
 	i.serverPollTrigger = make(chan struct{}, 1)
 	i.startServerNodePoller(rootClient, resp.PollInterval)
-	i.startServerStatusTask(rootClient)
 	return nil
 }
 
