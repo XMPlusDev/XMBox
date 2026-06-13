@@ -233,8 +233,10 @@ func (m *Manager) Remove(ib interface{ Tag() string }, protocol string, emails [
 	}
 }
 
-// SubscriptionMonitor reports traffic and online IPs to the panel.
-func (m *Manager) SubscriptionMonitor(tag, logPrefix string) error {
+// SubscriptionMonitor reports traffic and online IPs to the panel. If pusher
+// is non-nil, reports are pushed over the Reverb WebSocket instead of the
+// regular HTTP API.
+func (m *Manager) SubscriptionMonitor(tag, logPrefix string, pusher func(string, any) error) error {
 	tc, ok := m.coreInstance.GetDispatcher().GetTrafficCounter(tag)
 	if !ok {
 		return nil
@@ -242,7 +244,14 @@ func (m *Manager) SubscriptionMonitor(tag, logPrefix string) error {
 
 	pending := limiter.DrainDeltas(tag, tc)
 	if pending != nil && len(pending.Result) > 0 {
-		if err := m.client.ReportTraffic(&pending.Result); err != nil {
+		if pusher != nil {
+			if err := pusher("traffic_report", pending.Result); err != nil {
+				log.Printf("%s Failed to push traffic data via Reverb: %v", logPrefix, err)
+			} else {
+				limiter.ResetTraffic(pending)
+				log.Printf("%s Pushed %d Traffic Usage Data via Reverb", logPrefix, len(pending.Result))
+			}
+		} else if err := m.client.ReportTraffic(&pending.Result); err != nil {
 			log.Print(err)
 		} else {
 			log.Printf("%s Report %d Subscription Traffic Usage Data", logPrefix, len(pending.Result))
@@ -254,7 +263,13 @@ func (m *Manager) SubscriptionMonitor(tag, logPrefix string) error {
 	if err != nil {
 		log.Print(err)
 	} else if onlineIPs != nil && len(*onlineIPs) > 0 {
-		if err = m.client.ReportOnlineIPs(onlineIPs); err != nil {
+		if pusher != nil {
+			if err := pusher("online_ips", onlineIPs); err != nil {
+				log.Printf("%s Failed to push online IPs via Reverb: %v", logPrefix, err)
+			} else {
+				log.Printf("%s Pushed %d Online IPs Data via Reverb", logPrefix, len(*onlineIPs))
+			}
+		} else if err = m.client.ReportOnlineIPs(onlineIPs); err != nil {
 			log.Print(err)
 		} else {
 			log.Printf("%s Report %d Subscription Online IPs Data", logPrefix, len(*onlineIPs))

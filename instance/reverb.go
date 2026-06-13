@@ -52,14 +52,10 @@ func (s *reverbSession) push(event string, data any) error {
 	if err != nil {
 		return err
 	}
-	inner, err := json.Marshal(map[string]any{"event": event, "data": payload})
-	if err != nil {
-		return err
-	}
 	msg := pusherMessage{
-		Event:   "client-event",
+		Event:   "client-" + event,
 		Channel: reverbChannel,
-		Data:    inner,
+		Data:    payload,
 	}
 	b, _ := json.Marshal(msg)
 

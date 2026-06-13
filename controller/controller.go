@@ -83,6 +83,23 @@ func New(coreInstance *instance.Instance, apiClient api.API, config *node.Config
 		intervalChangeCh:        make(chan time.Duration, 1),
 		triggerCtx:              ctx,
 		triggerCancel:           cancel,
+		pusher:                  coreInstance.PushEvent,
+	}
+}
+
+// nodePusher wraps the instance-level pusher with this controller's node ID,
+// matching the envelope format the panel expects from Reverb push events.
+func (c *Controller) nodePusher() func(string, any) error {
+	if c.pusher == nil {
+		return nil
+	}
+	nodeID := c.clientInfo.NodeID
+	push := c.pusher
+	return func(event string, data any) error {
+		return push(event, map[string]any{
+			"node_id": nodeID,
+			"data":    data,
+		})
 	}
 }
 
@@ -160,7 +177,7 @@ func (c *Controller) Start() error {
 
 	c.taskManager.Add(scheduler.NewWithDelay(c.LogPrefix, "node", c.currentPollInterval, c.apiMonitor))
 	c.taskManager.Add(scheduler.NewWithDelay(c.LogPrefix, "subscriptions", c.currentPollInterval,
-		func() error { return c.subManager.SubscriptionMonitor(c.Tag, c.LogPrefix) }))
+		func() error { return c.subManager.SubscriptionMonitor(c.Tag, c.LogPrefix, c.nodePusher()) }))
 	c.taskManager.Add(scheduler.NewWithDelay(c.LogPrefix, "rules", c.currentPollInterval, c.ruleMonitor))
 
 	if c.nodeInfo.TlsSettings != nil && c.nodeInfo.TlsSettings.Type == "tls" {

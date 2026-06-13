@@ -12,7 +12,7 @@ type Config struct {
 	ApiConfig      *api.Config `mapstructure:"ApiConfig"`
 	RedisConfig *limiter.RedisConfig `mapstructure:"RedisConfig"`
 	CertConfig *cert.CertConfig `mapstructure:"CertConfig"`
-ReverbConfig []*ReverbConfig `mapstructure:"ReverbConfig"`
+    ReverbConfig []*ReverbConfig `mapstructure:"ReverbConfig"`
 }
 
 type NodesConfig struct {
