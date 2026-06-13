@@ -245,7 +245,11 @@ func (m *Manager) SubscriptionMonitor(tag, logPrefix string, pusher func(string,
 	pending := limiter.DrainDeltas(tag, tc)
 	if pending != nil && len(pending.Result) > 0 {
 		if pusher != nil {
-			if err := pusher("traffic_report", pending.Result); err != nil {
+			traffic := make([]api.Traffic, len(pending.Result))
+			for idx, t := range pending.Result {
+				traffic[idx] = api.Traffic{Id: t.Id, Upload: t.Upload, Download: t.Download}
+			}
+			if err := pusher("traffic_report", traffic); err != nil {
 				log.Printf("%s Failed to push traffic data via Reverb: %v", logPrefix, err)
 			} else {
 				limiter.ResetTraffic(pending)
@@ -264,7 +268,11 @@ func (m *Manager) SubscriptionMonitor(tag, logPrefix string, pusher func(string,
 		log.Print(err)
 	} else if onlineIPs != nil && len(*onlineIPs) > 0 {
 		if pusher != nil {
-			if err := pusher("online_ips", onlineIPs); err != nil {
+			aliveIPs := make([]api.AliveIP, len(*onlineIPs))
+			for idx, ip := range *onlineIPs {
+				aliveIPs[idx] = api.AliveIP{Id: ip.Id, IP: ip.IP}
+			}
+			if err := pusher("online_ips", aliveIPs); err != nil {
 				log.Printf("%s Failed to push online IPs via Reverb: %v", logPrefix, err)
 			} else {
 				log.Printf("%s Pushed %d Online IPs Data via Reverb", logPrefix, len(*onlineIPs))
