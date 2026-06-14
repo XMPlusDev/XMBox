@@ -512,7 +512,7 @@ func (c *Controller) certMonitor() error {
 }
 
 func (c *Controller) logPrefix() string {
-	return fmt.Sprintf("[%s] %s(NodeID=%d)", c.clientInfo.APIHost, c.nodeInfo.Protocol, c.nodeInfo.ID)
+	return fmt.Sprintf("[%s] %s(XMBox NodeID=%d)", c.clientInfo.APIHost, c.nodeInfo.Protocol, c.nodeInfo.ID)
 }
 
 func (c *Controller) buildNodeTag() string {

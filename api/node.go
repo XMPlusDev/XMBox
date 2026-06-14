@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"math/rand"
 	"strconv"
 	"strings"
 
@@ -437,6 +438,12 @@ func (c *Client) GetTransitNode() (*RelayNodeInfo, error) {
 		Address:   s.RAddress,
 		ServerKey: s.RServerKey,
 	}
+	
+	connectPort, err := selectSinglePort(s.RPort)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse relay connection port: %w", err)
+	}
+	nodeInfo.Port = uint16(connectPort)
 
 	// Network settings
 	netJSON, err := s.RNetworkSettings.MarshalJSON()
@@ -471,7 +478,7 @@ func (c *Client) GetTransitNode() (*RelayNodeInfo, error) {
 // nodeInfo.Port and nodeInfo.NetworkSettings, reusing the same wire format as
 // parseNetworkSettings.
 func (c *Client) parseRelayNetworkSettings(networkData *simplejson.Json, nodeInfo *RelayNodeInfo) error {
-	portNode, ok := networkData.CheckGet("listen_port")
+	/*portNode, ok := networkData.CheckGet("listen_port")
 	if !ok {
 		return fmt.Errorf("listen_port is required")
 	}
@@ -481,7 +488,7 @@ func (c *Client) parseRelayNetworkSettings(networkData *simplejson.Json, nodeInf
 		if p, err := strconv.Atoi(str); err == nil {
 			nodeInfo.Port = uint16(p)
 		}
-	}
+	}*/
 
 	if cipher, ok := networkData.CheckGet("cipher"); ok {
 		nodeInfo.Cipher = cipher.MustString()
@@ -607,4 +614,46 @@ func parseRulesList(rules *[]Rule) (*[]DetectRules, error) {
 		out = append(out, DetectRules{ID: r.Id, Pattern: re})
 	}
 	return &out, nil
+}
+
+func selectSinglePort(portString string) (uint32, error) {
+	if portString == "" {
+		return 0, fmt.Errorf("port string is empty")
+	}
+
+	var allPorts []uint32
+
+	if strings.Contains(portString, ",") {
+		for _, p := range strings.Split(portString, ",") {
+			p = strings.TrimSpace(p)
+			if p == "" {
+				continue
+			}
+			ports, err := expandPortRange(p)
+			if err != nil {
+				return 0, err
+			}
+			allPorts = append(allPorts, ports...)
+		}
+	} else if strings.Contains(portString, "-") {
+		ports, err := expandPortRange(portString)
+		if err != nil {
+			return 0, err
+		}
+		allPorts = append(allPorts, ports...)
+	} else {
+		port, err := strconv.ParseUint(portString, 10, 32)
+		if err != nil {
+			return 0, fmt.Errorf("invalid port number: %s", portString)
+		}
+		if port < 1 || port > 65535 {
+			return 0, fmt.Errorf("port out of range: %d", port)
+		}
+		return uint32(port), nil
+	}
+
+	if len(allPorts) == 0 {
+		return 0, fmt.Errorf("no valid ports found in: %s", portString)
+	}
+	return allPorts[rand.Intn(len(allPorts))], nil
 }
