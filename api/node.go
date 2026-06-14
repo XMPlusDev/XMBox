@@ -657,3 +657,33 @@ func selectSinglePort(portString string) (uint32, error) {
 	}
 	return allPorts[rand.Intn(len(allPorts))], nil
 }
+
+func expandPortRange(p string) ([]uint32, error) {
+	if strings.Contains(p, "-") {
+		parts := strings.SplitN(p, "-", 2)
+		from, err := strconv.ParseUint(strings.TrimSpace(parts[0]), 10, 32)
+		if err != nil {
+			return nil, fmt.Errorf("invalid port in range: %s", parts[0])
+		}
+		to, err := strconv.ParseUint(strings.TrimSpace(parts[1]), 10, 32)
+		if err != nil {
+			return nil, fmt.Errorf("invalid port in range: %s", parts[1])
+		}
+		if from < 1 || from > 65535 || to < 1 || to > 65535 {
+			return nil, fmt.Errorf("port out of range: %d-%d", from, to)
+		}
+		var ports []uint32
+		for i := from; i <= to; i++ {
+			ports = append(ports, uint32(i))
+		}
+		return ports, nil
+	}
+	port, err := strconv.ParseUint(p, 10, 32)
+	if err != nil {
+		return nil, fmt.Errorf("invalid port number: %s", p)
+	}
+	if port < 1 || port > 65535 {
+		return nil, fmt.Errorf("port out of range: %d", port)
+	}
+	return []uint32{uint32(port)}, nil
+}
