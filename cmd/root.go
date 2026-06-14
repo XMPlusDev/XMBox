@@ -66,6 +66,28 @@ func getConfig() (*viper.Viper, error) {
 	return config, nil
 }
 
+// validateConfigFile re-reads the config file from disk (independently of
+// the watched viper instance) and checks that it parses into a usable
+// instance.Config. It's used to confirm a config-change notification points
+// at a complete, valid file before triggering a restart.
+func validateConfigFile() error {
+	config, err := getConfig()
+	if err != nil {
+		return err
+	}
+
+	boxConfig := &instance.Config{}
+	if err := config.Unmarshal(boxConfig); err != nil {
+		return fmt.Errorf("parse config file: %w", err)
+	}
+
+	if boxConfig.ApiConfig == nil || boxConfig.ApiConfig.ServerID == 0 {
+		return fmt.Errorf("ApiConfig.ServerID is required — XMBox only supports server mode")
+	}
+
+	return nil
+}
+
 func run() error {
 	showVersion()
 
@@ -101,10 +123,39 @@ func run() error {
 		}
 
 		log.Printf("Config file changed: %s", e.Name)
-		select {
-		case restartChan <- true:
-		default:
-		}
+
+		// The file may have been rewritten in multiple steps (truncate then
+		// write, or a temp-file rename), so a fsnotify event can fire before
+		// the new content is fully on disk. Re-exec'ing on a half-written
+		// config produces an empty/invalid ApiConfig and crash-loops the
+		// process. Wait for a config that parses and validates before
+		// requesting a restart; if it never settles, skip the reload and
+		// keep running with the current (last-known-good) config.
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Errorf("Recovered from panic in config reload validation: %v", r)
+				}
+			}()
+
+			const (
+				attempts = 10
+				delay    = 300 * time.Millisecond
+			)
+			for i := 0; i < attempts; i++ {
+				time.Sleep(delay)
+				if err := validateConfigFile(); err != nil {
+					log.Warnf("Config file not ready yet (%d/%d): %v", i+1, attempts, err)
+					continue
+				}
+				select {
+				case restartChan <- true:
+				default:
+				}
+				return
+			}
+			log.Errorf("Config file %s did not become valid after %d attempts; skipping reload", e.Name, attempts)
+		}()
 	})
 
 	// Start watching only after the handler is registered, so an early
