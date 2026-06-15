@@ -116,6 +116,7 @@ func (c *Client) NodeResponse(s *serverConfig) (*NodeInfo, error) {
 		SpeedLimit:     uint64(s.ServerSpeedlimit * 1000000 / 8),
 		RelayType:      s.RelayType,
 		RelayNodeID:    s.RelayNodeId,
+		IgnoreIPs:      s.IgnoreIPs,
 	}
 
 	// Network settings

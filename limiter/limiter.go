@@ -40,6 +40,7 @@ type IPData struct {
 type InboundInfo struct {
 	Tag             string
 	NodeSpeedLimit  uint64
+	IgnoreIPs       []string
 	SubscriptionInfo *sync.Map // email → SubscriptionInfo
 	BucketHub        *sync.Map // email → *rate.Limiter
 
@@ -89,10 +90,11 @@ func Init(cfg *RedisConfig) error {
 
 // AddLimiter registers a new inbound tag with the global limiter.
 // expiry is the IP-map TTL in seconds (usually equal to node UpdateInterval).
-func (l *Limiter) AddLimiter(tag string, expiry int, nodeSpeedLimit uint64, subscriptionList *[]api.SubscriptionInfo) error {
+func (l *Limiter) AddLimiter(tag string, expiry int, nodeSpeedLimit uint64, ignoreIPs []string, subscriptionList *[]api.SubscriptionInfo) error {
 	info := &InboundInfo{
 		Tag:            tag,
 		NodeSpeedLimit: nodeSpeedLimit,
+		IgnoreIPs:      ignoreIPs,
 		BucketHub:      new(sync.Map),
 	}
 
@@ -117,6 +119,20 @@ func (l *Limiter) AddLimiter(tag string, expiry int, nodeSpeedLimit uint64, subs
 	info.SubscriptionInfo = subMap
 
 	l.InboundInfo.Store(tag, info)
+	return nil
+}
+
+// UpdateNodeInfo refreshes node-level limiter settings (speed limit and
+// ignore-IP list) in-place, without recreating subscription state or Redis
+// wiring. Used when the node info changes but the inbound tag stays the same.
+func (l *Limiter) UpdateNodeInfo(tag string, nodeSpeedLimit uint64, ignoreIPs []string) error {
+	v, ok := l.InboundInfo.Load(tag)
+	if !ok {
+		return fmt.Errorf("no limiter found for tag %s", tag)
+	}
+	info := v.(*InboundInfo)
+	info.NodeSpeedLimit = nodeSpeedLimit
+	info.IgnoreIPs = ignoreIPs
 	return nil
 }
 
@@ -189,8 +205,16 @@ func (l *Limiter) CheckLimiter(tag, email, ip string) (*rate.Limiter, bool, bool
 		speedLimit = sub.SpeedLimit
 		ipLimit = sub.IPLimit
 	}
+	
+	ignored := false
+	for _, ignoreip := range info.IgnoreIPs {
+		if ignoreip == ip {
+			ignored = true
+			break
+		}
+	}
 
-	if info.GlobalIPLimit.config != nil && info.GlobalIPLimit.config.Enable {
+	if !ignored && info.GlobalIPLimit.config != nil && info.GlobalIPLimit.config.Enable {
 		if checkIPLimit(info, email, uid, ip, ipLimit, tag) {
 			return nil, false, true, "IP limit exceeded"
 		}
@@ -423,12 +447,16 @@ func GetLimiter(tag string) (*Limiter, error) {
 	return globalLimiter, nil
 }
 
-func AddLimiter(tag string, expiry int, nodeSpeedLimit uint64, subscriptionList *[]api.SubscriptionInfo) error {
-	return globalLimiter.AddLimiter(tag, expiry, nodeSpeedLimit, subscriptionList)
+func AddLimiter(tag string, expiry int, nodeSpeedLimit uint64, ignoreIPs []string, subscriptionList *[]api.SubscriptionInfo) error {
+	return globalLimiter.AddLimiter(tag, expiry, nodeSpeedLimit, ignoreIPs, subscriptionList)
 }
 
 func UpdateLimiter(tag string, updated *[]api.SubscriptionInfo) error {
 	return globalLimiter.UpdateLimiter(tag, updated)
+}
+
+func UpdateNodeInfo(tag string, nodeSpeedLimit uint64, ignoreIPs []string) error {
+	return globalLimiter.UpdateNodeInfo(tag, nodeSpeedLimit, ignoreIPs)
 }
 
 func DeleteLimiter(tag string) error {

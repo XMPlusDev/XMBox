@@ -168,6 +168,7 @@ func (c *Controller) Start() error {
 		c.Tag,
 		nodeInfo.UpdateInterval,
 		nodeInfo.SpeedLimit,
+		nodeInfo.IgnoreIPs,
 		subscriptions,
 	); err != nil {
 		log.Printf("%s AddLimiter error: %v", c.LogPrefix, err)
@@ -352,10 +353,14 @@ func (c *Controller) apiMonitor() error {
 			if err := limiter.DeleteLimiter(oldTag); err != nil {
 				return fmt.Errorf("DeleteLimiter: %w", err)
 			}
-			if err := limiter.AddLimiter(c.Tag, newNodeInfo.UpdateInterval, newNodeInfo.SpeedLimit, newSubs); err != nil {
+			if err := limiter.AddLimiter(c.Tag, newNodeInfo.UpdateInterval, newNodeInfo.SpeedLimit, newNodeInfo.IgnoreIPs, newSubs); err != nil {
 				log.Printf("%s AddLimiter error: %v", c.LogPrefix, err)
 			}
 		} else {
+			if err := limiter.UpdateNodeInfo(c.Tag, newNodeInfo.SpeedLimit, newNodeInfo.IgnoreIPs); err != nil {
+				log.Printf("%s UpdateNodeInfo error: %v", c.LogPrefix, err)
+			}
+
 			deleted, added, modified := subscription.CompareSubscriptions(c.subscriptionList, newSubs)
 			if len(deleted) > 0 {
 				limiter.RemoveSubscriptions(oldTag, subscription.GetEmails(deleted, oldTag))
@@ -457,7 +462,7 @@ func (c *Controller) setupRelay(nodeInfo *api.NodeInfo, subscriptions *[]api.Sub
 		return fmt.Errorf("AddRelayTag: %w", err)
 	}
 	c.Relay = true
-	//log.Printf("%s added relay tag %s -> %s:%d (%s)", c.LogPrefix, c.RelayTag, relayNodeInfo.Address, relayNodeInfo.Port, relayNodeInfo.NodeType)
+	log.Printf("%s added relay tag %s -> %s:%d (%s)", c.LogPrefix, c.RelayTag, relayNodeInfo.Address, relayNodeInfo.Port, relayNodeInfo.NodeType)
 	return nil
 }
 

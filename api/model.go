@@ -37,6 +37,7 @@ type serverConfig struct {
 	transitServer `json:"transit_server"`
 	UpdateInterval int `json:"update_interval"`
 	Version        int `json:"api_version"`
+	IgnoreIPs      []string `json:"ignore_ips"`
 }
 
 type server struct {
@@ -176,6 +177,7 @@ type FallbackConfig struct {
 type NodeInfo struct {
 	ID              int
 	ServerKey       string
+	IgnoreIPs       []string
 	Protocol        string
 	SpeedLimit      uint64
 	UpdateInterval  int
