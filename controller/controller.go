@@ -462,7 +462,6 @@ func (c *Controller) setupRelay(nodeInfo *api.NodeInfo, subscriptions *[]api.Sub
 		return fmt.Errorf("AddRelayTag: %w", err)
 	}
 	c.Relay = true
-	log.Printf("%s added relay tag %s -> %s:%d (%s)", c.LogPrefix, c.RelayTag, relayNodeInfo.Address, relayNodeInfo.Port, relayNodeInfo.NodeType)
 	return nil
 }
 
