@@ -217,6 +217,7 @@ func buildRelayTLS(relayNodeInfo *api.RelayNodeInfo) (option.OutboundTLSOptionsC
 
 	tls := &option.OutboundTLSOptions{
 		Enabled:    true,
+		Insecure:   true,
 		ServerName: ts.ServerName,
 		ALPN:       badoption.Listable[string](ts.Alpn),
 	}
