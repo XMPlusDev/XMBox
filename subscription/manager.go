@@ -53,7 +53,7 @@ func (m *Manager) Add(subscriptions *[]api.SubscriptionInfo, ib interface{ Tag()
 		}
 		users := make([]option.VLESSUser, len(*subscriptions))
 		for i, u := range *subscriptions {
-			users[i] = option.VLESSUser{Name: buildUserTag(tag, &u), UUID: u.UUID, Flow: flow}
+			users[i] = option.VLESSUser{Name: BuildUserTag(tag, &u), UUID: u.UUID, Flow: flow}
 		}
 		return mgr.AddUsers(users)
 
@@ -64,7 +64,7 @@ func (m *Manager) Add(subscriptions *[]api.SubscriptionInfo, ib interface{ Tag()
 		}
 		users := make([]option.VMessUser, len(*subscriptions))
 		for i, u := range *subscriptions {
-			users[i] = option.VMessUser{Name: buildUserTag(tag, &u), UUID: u.UUID}
+			users[i] = option.VMessUser{Name: BuildUserTag(tag, &u), UUID: u.UUID}
 		}
 		return mgr.AddUsers(users)
 
@@ -75,7 +75,7 @@ func (m *Manager) Add(subscriptions *[]api.SubscriptionInfo, ib interface{ Tag()
 		}
 		users := make([]option.TrojanUser, len(*subscriptions))
 		for i, u := range *subscriptions {
-			users[i] = option.TrojanUser{Name: buildUserTag(tag, &u), Password: u.UUID}
+			users[i] = option.TrojanUser{Name: BuildUserTag(tag, &u), Password: u.UUID}
 		}
 		return mgr.AddUsers(users)
 
@@ -86,7 +86,7 @@ func (m *Manager) Add(subscriptions *[]api.SubscriptionInfo, ib interface{ Tag()
 		}
 		users := make([]option.TUICUser, len(*subscriptions))
 		for i, u := range *subscriptions {
-			users[i] = option.TUICUser{Name: buildUserTag(tag, &u), UUID: u.UUID, Password: u.UUID}
+			users[i] = option.TUICUser{Name: BuildUserTag(tag, &u), UUID: u.UUID, Password: u.UUID}
 		}
 		return mgr.AddUsers(users)
 
@@ -97,7 +97,7 @@ func (m *Manager) Add(subscriptions *[]api.SubscriptionInfo, ib interface{ Tag()
 		}
 		users := make([]option.Hysteria2User, len(*subscriptions))
 		for i, u := range *subscriptions {
-			users[i] = option.Hysteria2User{Name: buildUserTag(tag, &u), Password: u.UUID}
+			users[i] = option.Hysteria2User{Name: BuildUserTag(tag, &u), Password: u.UUID}
 		}
 		return mgr.AddUsers(users)
 
@@ -108,7 +108,7 @@ func (m *Manager) Add(subscriptions *[]api.SubscriptionInfo, ib interface{ Tag()
 		}
 		users := make([]auth.User, len(*subscriptions))
 		for i, u := range *subscriptions {
-			users[i] = auth.User{Username: buildUserTag(tag, &u), Password: u.UUID}
+			users[i] = auth.User{Username: BuildUserTag(tag, &u), Password: u.UUID}
 		}
 		return mgr.AddUsers(users)
 
@@ -119,7 +119,7 @@ func (m *Manager) Add(subscriptions *[]api.SubscriptionInfo, ib interface{ Tag()
 		}
 		users := make([]option.ShadowsocksUser, 0, len(*subscriptions))
 		for _, u := range *subscriptions {
-			users = append(users, option.ShadowsocksUser{Name: buildUserTag(tag, &u), Password: u.Passwd})
+			users = append(users, option.ShadowsocksUser{Name: BuildUserTag(tag, &u), Password: u.Passwd})
 		}
 		return mgr.AddUsers(users)
 
@@ -130,7 +130,7 @@ func (m *Manager) Add(subscriptions *[]api.SubscriptionInfo, ib interface{ Tag()
 		}
 		users := make([]option.ShadowTLSUser, len(*subscriptions))
 		for i, u := range *subscriptions {
-			users[i] = option.ShadowTLSUser{Name: buildUserTag(tag, &u), Password: u.UUID}
+			users[i] = option.ShadowTLSUser{Name: BuildUserTag(tag, &u), Password: u.UUID}
 		}
 		return mgr.AddUsers(users)
 
@@ -141,7 +141,7 @@ func (m *Manager) Add(subscriptions *[]api.SubscriptionInfo, ib interface{ Tag()
 		}
 		users := make([]option.AnyTLSUser, len(*subscriptions))
 		for i, u := range *subscriptions {
-			users[i] = option.AnyTLSUser{Name: buildUserTag(tag, &u), Password: u.UUID}
+			users[i] = option.AnyTLSUser{Name: BuildUserTag(tag, &u), Password: u.UUID}
 		}
 		return mgr.AddUsers(users)
 
@@ -360,8 +360,8 @@ func (m *Manager) ResetTraffic(pending *limiter.PendingTraffic) {
 	limiter.ResetTraffic(pending)
 }
 
-// buildUserTag constructs a composite key from the node tag and user email.
-func buildUserTag(tag string, sub *api.SubscriptionInfo) string {
+// BuildUserTag constructs a composite key from the node tag and user email.
+func BuildUserTag(tag string, sub *api.SubscriptionInfo) string {
 	return fmt.Sprintf("%s_%s", tag, sub.Email)
 }
 

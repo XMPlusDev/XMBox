@@ -7,6 +7,7 @@ import (
 	"github.com/sagernet/sing/common/json/badoption"
 
 	"github.com/xmplusdev/xmbox/api"
+	sub_module "github.com/xmplusdev/xmbox/subscription"
 )
 
 // RelayRuleTag returns the per-subscription router rule tag for a relay.
@@ -26,7 +27,7 @@ func RelayRuleOptions(tag string, relayTag string, subscription *api.Subscriptio
 		Type: "default",
 	}
 	rule.DefaultOptions.Inbound = badoption.Listable[string]{tag}
-	rule.DefaultOptions.User = badoption.Listable[string]{subscription.Email}
+	rule.DefaultOptions.AuthUser = badoption.Listable[string]{sub_module.BuildUserTag(tag, subscription)}
 	rule.DefaultOptions.RuleAction.Action = "route"
 	rule.DefaultOptions.RuleAction.RouteOptions.Outbound = RelayOutboundTag(relayTag, subscription)
 
