@@ -17,31 +17,21 @@ func New(certConf *CertConfig, path ...string) (*LegoCMD, error) {
 	return newLego(certConf, "", path...)
 }
 
-// NewForNode creates a LegoCMD with a per-node DNS provider override.
-// If providerName is non-empty and found in CertConfig.Providers, its CertEnv
-// and provider name replace the server-level defaults for this instance only.
-// Falls back to the server-level Provider + CertEnv if not found.
 func NewForNode(certConf *CertConfig, providerName string, path ...string) (*LegoCMD, error) {
 	return newLego(certConf, providerName, path...)
 }
 
 func newLego(certConf *CertConfig, providerName string, path ...string) (*LegoCMD, error) {
-	var p string
+	var p = ""
+	
 	if len(path) > 0 && path[0] != "" {
 		p = path[0]
 	} else {
-		configPath := os.Getenv("XRAY_LOCATION_CONFIG")
-		if configPath != "" {
-			p = configPath
-		} else {
-			p = "/etc/XMRay"
-		}
+		p = "/etc/XMBox"
 	}
 
 	defaultPath = filepath.Join(p, "cert")
-
-	// Resolve provider: if a per-node override is given and exists, build a
-	// merged CertConfig so the rest of the cert methods need no changes.
+	
 	resolved := certConf
 	if providerName != "" && certConf.Providers != nil {
 		if pc, ok := certConf.Providers[providerName]; ok && pc != nil {
@@ -125,7 +115,6 @@ func (l *LegoCMD) HTTPCert(CertMode string, CertDomain string, Email string) (Ce
 				return "", "", fmt.Errorf("failed to stop %s: %v", stoppedService.Name, err)
 			}
 			defer func() {
-				fmt.Printf("Restarting %s...\n", stoppedService.Name)
 				if err := startService(stoppedService.Name); err != nil {
 					fmt.Printf("Failed to restart %s: %v\n", stoppedService.Name, err)
 				}
@@ -168,7 +157,6 @@ func (l *LegoCMD) RenewCert(CertMode string, CertDomain string, Email string) (C
 				return "", "", false, fmt.Errorf("failed to stop %s: %v", stoppedService.Name, err)
 			}
 			defer func() {
-				fmt.Printf("Restarting %s...\n", stoppedService.Name)
 				if err := startService(stoppedService.Name); err != nil {
 					fmt.Printf("Failed to restart %s: %v\n", stoppedService.Name, err)
 				}
@@ -255,8 +243,8 @@ func identifyService(processName string) *ServiceInfo {
 		"caddy":    "caddy",
 		"traefik":  "traefik",
 		"lighttpd": "lighttpd",
-		"xmbox":    "XMBox",
-		"XMBox":    "XMBox",
+		"xmray":    "XMRay",
+		"XMRay":    "XMRay",
 	}
 	for proc, service := range serviceMap {
 		if strings.Contains(lower, proc) {

@@ -3,9 +3,11 @@ ApiConfig:                                        # API Configuraion
   ApiKey: "123"                                   # Server api key from admin general settigs 
   ServerID: 1                                     # Important: The id of the server and not node id.
   Timeout: 30                                     # Connection time out. Cannot be higer than api update interval.
-CertConfig:                                       # Cert config for when cert mode is dns
-  Provider: cloudflare                            
-  Providers:
+CertConfig:    
+  CertFile:                                       # Cert config for when cert mode is file
+  KeyFile:                                        # Cert config for when cert mode is file
+  Provider: cloudflare                            # Cert config for when cert mode is dns
+  Providers:                                      # Cert config for when cert mode is dns
     cloudflare:                                   # Provider name. eg, cloudflare. Set in panel tlsSettings - dnsProvider https://go-acme.github.io/lego/dns/index.html
       CertEnv:
         CLOUDFLARE_DNS_API_TOKEN: x               # Cert Provider environment variables.
