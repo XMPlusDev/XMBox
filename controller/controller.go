@@ -279,6 +279,23 @@ func (c *Controller) pollInterval() time.Duration {
 	return time.Duration(c.nodeInfo.UpdateInterval) * time.Second
 }
 
+// nodeInfoChangedStructurally reports whether old and new NodeInfo differ in
+// a field that requires rebuilding the inbound (e.g. port, protocol, key,
+// transport, or TLS settings). SpeedLimit, IgnoreIPs, and UpdateInterval can
+// all be applied in-place via limiter.UpdateNodeInfo without dropping
+// connections, so they're excluded from the comparison to avoid an
+// unnecessary outage on every minor poll-cycle change.
+func nodeInfoChangedStructurally(old, new *api.NodeInfo) bool {
+	if old == nil || new == nil {
+		return true
+	}
+	o, n := *old, *new
+	o.SpeedLimit, n.SpeedLimit = 0, 0
+	o.IgnoreIPs, n.IgnoreIPs = nil, nil
+	o.UpdateInterval, n.UpdateInterval = 0, 0
+	return !reflect.DeepEqual(o, n)
+}
+
 // apiMonitor fetches updated node info and subscription list, then reconciles
 // the running state accordingly.
 func (c *Controller) apiMonitor() error {
@@ -306,7 +323,7 @@ func (c *Controller) apiMonitor() error {
 		}
 	}
 
-	nodeInfoActuallyChanged := nodeInfoChanged && !reflect.DeepEqual(c.nodeInfo, newNodeInfo)
+	nodeInfoActuallyChanged := nodeInfoChanged && nodeInfoChangedStructurally(c.nodeInfo, newNodeInfo)
 
 	if c.Relay && (nodeInfoActuallyChanged || subscriptionChanged) {
 		if err := c.nodeManager.RemoveRelayRules(c.RelayTag, c.subscriptionList); err != nil {
@@ -393,46 +410,71 @@ func (c *Controller) apiMonitor() error {
 			default:
 			}
 		}
-	} else if subscriptionChanged {
-		deleted, added, modified := subscription.CompareSubscriptions(c.subscriptionList, newSubs)
-
-		if len(deleted) > 0 {
-			emails := subscription.GetEmails(deleted, c.Tag)
-			if err := c.subManager.RemoveSubscriptions(emails, c.Tag, c.nodeInfo.Protocol); err != nil {
-				log.Printf("%s RemoveSubscriptions error: %v", c.LogPrefix, err)
-			} else {
-				limiter.RemoveSubscriptions(c.Tag, emails)
-				log.Printf("%s removed %d subscription(s)", c.LogPrefix, len(deleted))
+	} else {
+		if nodeInfoChanged {
+			c.nodeInfo = newNodeInfo
+			if err := limiter.UpdateNodeInfo(c.Tag, newNodeInfo.SpeedLimit, newNodeInfo.IgnoreIPs); err != nil {
+				log.Printf("%s UpdateNodeInfo error: %v", c.LogPrefix, err)
 			}
-		}
-		if len(added) > 0 {
-			if err := c.subManager.AddSubscriptions(&added, c.nodeInfo, c.Tag); err != nil {
-				log.Printf("%s AddSubscriptions (new): %v", c.LogPrefix, err)
-			} else {
-				log.Printf("%s added %d subscription(s)", c.LogPrefix, len(added))
-				if err := limiter.UpdateLimiter(c.Tag, &added); err != nil {
-					log.Printf("%s UpdateLimiter (new): %v", c.LogPrefix, err)
+
+			newInterval := c.pollInterval()
+			if c.currentPollInterval != newInterval {
+				for _, tag := range []string{"node", "subscriptions", "rules"} {
+					if t := c.taskManager.GetTask(tag); t != nil {
+						if err := t.RestartWithInterval(newInterval); err != nil {
+							log.Printf("%s restart task %s: %v", c.LogPrefix, tag, err)
+						}
+					}
+				}
+				c.currentPollInterval = newInterval
+				select {
+				case c.intervalChangeCh <- newInterval:
+				default:
 				}
 			}
 		}
-		if len(modified) > 0 {
-			emails := subscription.GetEmails(modified, c.Tag)
-			if err := c.subManager.RemoveSubscriptions(emails, c.Tag, c.nodeInfo.Protocol); err != nil {
-				log.Printf("%s RemoveSubscriptions (modified): %v", c.LogPrefix, err)
-			} else {
-				limiter.RemoveSubscriptions(c.Tag, emails)
-			}
-			if err := c.subManager.AddSubscriptions(&modified, c.nodeInfo, c.Tag); err != nil {
-				log.Printf("%s AddSubscriptions (modified): %v", c.LogPrefix, err)
-			}
-			if err := limiter.UpdateLimiter(c.Tag, &modified); err != nil {
-				log.Printf("%s UpdateLimiter (modified): %v", c.LogPrefix, err)
-			}
-			log.Printf("%s modified %d subscription(s)", c.LogPrefix, len(modified))
-		}
 
-		if err := c.setupRelay(c.nodeInfo, newSubs); err != nil {
-			log.Printf("%s setupRelay error: %v", c.LogPrefix, err)
+		if subscriptionChanged {
+			deleted, added, modified := subscription.CompareSubscriptions(c.subscriptionList, newSubs)
+
+			if len(deleted) > 0 {
+				emails := subscription.GetEmails(deleted, c.Tag)
+				if err := c.subManager.RemoveSubscriptions(emails, c.Tag, c.nodeInfo.Protocol); err != nil {
+					log.Printf("%s RemoveSubscriptions error: %v", c.LogPrefix, err)
+				} else {
+					limiter.RemoveSubscriptions(c.Tag, emails)
+					log.Printf("%s removed %d subscription(s)", c.LogPrefix, len(deleted))
+				}
+			}
+			if len(added) > 0 {
+				if err := c.subManager.AddSubscriptions(&added, c.nodeInfo, c.Tag); err != nil {
+					log.Printf("%s AddSubscriptions (new): %v", c.LogPrefix, err)
+				} else {
+					log.Printf("%s added %d subscription(s)", c.LogPrefix, len(added))
+					if err := limiter.UpdateLimiter(c.Tag, &added); err != nil {
+						log.Printf("%s UpdateLimiter (new): %v", c.LogPrefix, err)
+					}
+				}
+			}
+			if len(modified) > 0 {
+				emails := subscription.GetEmails(modified, c.Tag)
+				if err := c.subManager.RemoveSubscriptions(emails, c.Tag, c.nodeInfo.Protocol); err != nil {
+					log.Printf("%s RemoveSubscriptions (modified): %v", c.LogPrefix, err)
+				} else {
+					limiter.RemoveSubscriptions(c.Tag, emails)
+				}
+				if err := c.subManager.AddSubscriptions(&modified, c.nodeInfo, c.Tag); err != nil {
+					log.Printf("%s AddSubscriptions (modified): %v", c.LogPrefix, err)
+				}
+				if err := limiter.UpdateLimiter(c.Tag, &modified); err != nil {
+					log.Printf("%s UpdateLimiter (modified): %v", c.LogPrefix, err)
+				}
+				log.Printf("%s modified %d subscription(s)", c.LogPrefix, len(modified))
+			}
+
+			if err := c.setupRelay(c.nodeInfo, newSubs); err != nil {
+				log.Printf("%s setupRelay error: %v", c.LogPrefix, err)
+			}
 		}
 	}
 
@@ -508,7 +550,7 @@ func (c *Controller) certMonitor() error {
 		if err != nil {
 			return fmt.Errorf("cert init: %w", err)
 		}
-		if _,_, _, err := lego.RenewCert(c.nodeInfo.TlsSettings.CertMode, c.nodeInfo.TlsSettings.ServerName, c.nodeInfo.TlsSettings.CertEmail); err != nil {
+		if _, _, _, err := lego.RenewCert(c.nodeInfo.TlsSettings.CertMode, c.nodeInfo.TlsSettings.ServerName, c.nodeInfo.TlsSettings.CertEmail); err != nil {
 			log.Printf("%s cert renew failed: %v", c.LogPrefix, err)
 		}
 	}
