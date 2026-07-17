@@ -78,7 +78,9 @@ Fallback redirect unrecognised or non-matching connections to another local serv
 ```
 
 <details>
+
 <summary><strong>Example of network settings with fallback settings</strong></summary>
+
 ```
   "listen_ip": "0.0.0.0",
   "listen_port": "443",
