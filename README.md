@@ -81,7 +81,8 @@ Fallback redirect unrecognised or non-matching connections to another local serv
 
 <summary><strong>Example of network settings with fallback settings</strong></summary>
 
-```
+```json
+{
   "listen_ip": "0.0.0.0",
   "listen_port": "443",
   "tcp_fast_open": true,
@@ -124,6 +125,7 @@ Fallback redirect unrecognised or non-matching connections to another local serv
   "strict_mode": false,
   "handshake_server": "www.microsoft.com",
   "handshake_server_port": 443
+}
 ```
 
 </details>
