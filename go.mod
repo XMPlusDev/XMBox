@@ -14,7 +14,7 @@ require (
 	github.com/redis/go-redis/v9 v9.20.0
 	github.com/sagernet/sing v0.8.12-0.20260625092856-31bbf21d4b12
 	github.com/sagernet/sing-box v1.14.0-alpha.35.0.20260627094832-156c4f5ceb6a
-	github.com/shirou/gopsutil/v4 v4.26.5
+	github.com/shirou/gopsutil/v4 v4.26.6
 	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
