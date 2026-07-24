@@ -25,7 +25,7 @@ require (
 )
 
 require (
-	github.com/anytls/sing-anytls v0.0.11
+	github.com/anytls/sing-anytls v0.0.13
 	github.com/gofrs/uuid/v5 v5.4.0
 	github.com/sagernet/quic-go v0.59.0-sing-box-mod.5
 	github.com/sagernet/sing-quic v0.6.2-0.20260525051024-9467ede27fb7
