@@ -13,6 +13,7 @@ import (
 
 	"github.com/sagernet/sing-box/adapter"
 	boxLog "github.com/sagernet/sing-box/log"
+	"github.com/sagernet/sing-tun"
 	N "github.com/sagernet/sing/common/network"
 
 	"github.com/xmplusdev/xmbox/counter"
@@ -145,6 +146,18 @@ func (d *Dispatcher) RoutedPacketConnection(
 	deregister = d.tracker.add(m.Inbound, m.User, nc)
 
 	return counter.NewPacketConnCounter(nc, t.GetCounter(m.User))
+}
+
+// RoutedFlow implements adapter.ConnectionTracker for TUN gVisor fast-path
+// flows. XMBox's inbounds never trigger this path; sing-box treats a nil
+// return as "no tracker for this call."
+func (d *Dispatcher) RoutedFlow(
+	ctx context.Context,
+	m adapter.InboundContext,
+	_ adapter.Rule,
+	_ adapter.Outbound,
+) tun.FlowTracker {
+	return nil
 }
 
 // CloseUserConns forcibly closes all connections for a user in a given tag.

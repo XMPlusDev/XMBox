@@ -130,17 +130,16 @@ func (h *NaiveInbound) Start(stage adapter.StartStage) error {
 				return h.ctx
 			},
 		}
-		go func() {
-			ln := net.Listener(tcpListener)
-			if h.tlsConfig != nil {
-				protos := h.tlsConfig.NextProtos()
-				if len(protos) == 0 {
-					h.tlsConfig.SetNextProtos([]string{http2.NextProtoTLS, "http/1.1"})
-				} else if !common.Contains(protos, http2.NextProtoTLS) {
-					h.tlsConfig.SetNextProtos(append([]string{http2.NextProtoTLS}, protos...))
-				}
-				ln = aTLS.NewListener(tcpListener, h.tlsConfig)
+		ln := net.Listener(tcpListener)
+		if h.tlsConfig != nil {
+			if len(h.tlsConfig.NextProtos()) == 0 {
+				h.tlsConfig.SetNextProtos([]string{http2.NextProtoTLS, "http/1.1"})
+			} else if !common.Contains(h.tlsConfig.NextProtos(), http2.NextProtoTLS) {
+				h.tlsConfig.SetNextProtos(append([]string{http2.NextProtoTLS}, h.tlsConfig.NextProtos()...))
 			}
+			ln = aTLS.NewListener(tcpListener, h.tlsConfig)
+		}
+		go func() {	
 			sErr := h.httpServer.Serve(ln)
 			if sErr != nil && !errors.Is(sErr, http.ErrServerClosed) {
 				h.logger.Error("http server serve error: ", sErr)
@@ -165,7 +164,7 @@ func (h *NaiveInbound) Start(stage adapter.StartStage) error {
 }
 
 func (h *NaiveInbound) Close() error {
-	return common.Close(&h.listener, common.PtrOrNil(h.httpServer), h.h3Server, h.tlsConfig)
+	return common.Close(h.listener, common.PtrOrNil(h.httpServer), h.h3Server, h.tlsConfig)
 }
 
 // ─── hot user management ─────────────────────────────────────────────────────
@@ -283,7 +282,7 @@ func (h *NaiveInbound) serveNaiveConn(ctx context.Context, waitForClose bool, co
 	} else {
 		done := make(chan struct{})
 		wrapper := v2rayhttp.NewHTTP2Wrapper(conn)
-		h.router.RouteConnectionEx(ctx, conn, metadata, N.OnceClose(func(error) {
+		h.router.RouteConnectionEx(ctx, wrapper, metadata, N.OnceClose(func(error) {
 			close(done)
 		}))
 		<-done

@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"sync"
 	"sync/atomic"
+	"os"
 	"time"
 
 	"github.com/sagernet/sing-box/adapter"
@@ -28,6 +29,7 @@ import (
 	N "github.com/sagernet/sing/common/network"
 	qtls "github.com/sagernet/sing-quic"
 	"github.com/sagernet/sing/service"
+	"github.com/sagernet/sing/service/filemanager"
 )
 
 type Hysteria2Inbound struct {
@@ -88,7 +90,12 @@ func newHysteria2Inbound(
 	if options.Masquerade != nil && options.Masquerade.Type != "" {
 		switch options.Masquerade.Type {
 		case C.Hysterai2MasqueradeTypeFile:
-			masqueradeHandler = http.FileServer(http.Dir(options.Masquerade.FileOptions.Directory))
+			masqueradeDirectory := filemanager.BasePath(ctx, os.ExpandEnv(options.Masquerade.FileOptions.Directory))
+			_, err = filemanager.ReadDir(ctx, masqueradeDirectory)
+			if err != nil && !os.IsNotExist(err) {
+				return nil, E.Cause(err, "read masquerade directory")
+			}
+			masqueradeHandler = http.FileServer(http.Dir(masqueradeDirectory))
 		case C.Hysterai2MasqueradeTypeProxy:
 			masqueradeURL, err := url.Parse(options.Masquerade.ProxyOptions.URL)
 			if err != nil {
@@ -144,6 +151,15 @@ func newHysteria2Inbound(
 
 	var realmOptions *realm.Options
 	if options.Realm != nil {
+		if options.Realm.IPVersion != 0 && options.ListenOptions.Listen != nil {
+			listenAddr := netip.Addr(*options.ListenOptions.Listen).Unmap()
+			if options.Realm.IPVersion == 6 && listenAddr.Is4() {
+				return nil, E.New("realm.ip_version 6 conflicts with listen address ", listenAddr)
+			}
+			if options.Realm.IPVersion == 4 && listenAddr.Is6() && !listenAddr.IsUnspecified() {
+				return nil, E.New("realm.ip_version 4 conflicts with listen address ", listenAddr)
+			}
+		}
 		queryOptions, err := adapter.DNSQueryOptionsFrom(ctx, options.Realm.STUNDomainResolver)
 		if err != nil {
 			return nil, err
@@ -170,6 +186,13 @@ func newHysteria2Inbound(
 				return dnsRouter.Lookup(ctx, host, dnsOptions)
 			},
 			Logger: logger,
+			IPVersion: options.Realm.IPVersion,
+		}
+		if options.Realm.PortMapping != nil && options.Realm.PortMapping.Enabled {
+			realmOptions.PortMapping = &realm.PortMappingOptions{
+				Timeout:  time.Duration(options.Realm.PortMapping.Timeout),
+				Lifetime: time.Duration(options.Realm.PortMapping.Lifetime),
+			}
 		}
 	}
 	hysteriaService, err := hysteria2.NewService[int](hysteria2.ServiceOptions{
