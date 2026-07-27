@@ -5,7 +5,7 @@ go 1.25.0
 require (
 	dario.cat/mergo v1.0.2
 	github.com/bitly/go-simplejson v0.5.1
-	github.com/eko/gocache/lib/v4 v4.2.3
+	github.com/eko/gocache/lib/v4 v4.2.4
 	github.com/eko/gocache/store/redis/v4 v4.2.6
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/go-acme/lego/v5 v5.2.3-0.20260615142111-af599be299ba
@@ -31,6 +31,7 @@ require (
 	github.com/sagernet/sing-quic v0.6.4-0.20260720125339-63fa6a7ebc31
 	github.com/sagernet/sing-shadowsocks v0.2.9
 	github.com/sagernet/sing-shadowtls v0.2.1
+	github.com/sagernet/sing-tun v0.8.12-0.20260724023008-68aa7bdc2819
 	github.com/sagernet/sing-vmess v0.2.8-0.20250909125414-3aed155119a1
 )
 
@@ -295,7 +296,6 @@ require (
 	github.com/sagernet/sing-openvpn v0.0.0-20260721005523-64b754d1c277 // indirect
 	github.com/sagernet/sing-shadowsocks2 v0.2.1 // indirect
 	github.com/sagernet/sing-snell v0.0.0-20260719094200-c43fbee0e839 // indirect
-	github.com/sagernet/sing-tun v0.8.12-0.20260724023008-68aa7bdc2819 // indirect
 	github.com/sagernet/sing-usbip v0.0.0-20260616101517-efb91521eddb // indirect
 	github.com/sagernet/smux v1.5.50-sing-box-mod.1 // indirect
 	github.com/sagernet/tailscale v1.92.4-sing-box-1.13-mod.7.0.20260717155615-b353b93d194a // indirect
