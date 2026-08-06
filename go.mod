@@ -14,7 +14,7 @@ require (
 	github.com/redis/go-redis/v9 v9.20.0
 	github.com/sagernet/sing v0.8.12-0.20260721063414-596db5dd6ef4
 	github.com/sagernet/sing-box v1.14.0-beta.1.0.20260725145838-f60f3728ce61
-	github.com/shirou/gopsutil/v4 v4.26.6
+	github.com/shirou/gopsutil/v4 v4.26.7
 	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
@@ -31,6 +31,7 @@ require (
 	github.com/sagernet/sing-quic v0.6.4-0.20260720125339-63fa6a7ebc31
 	github.com/sagernet/sing-shadowsocks v0.2.9
 	github.com/sagernet/sing-shadowtls v0.2.1
+	github.com/sagernet/sing-tun v0.8.12-0.20260724023008-68aa7bdc2819
 	github.com/sagernet/sing-vmess v0.2.8-0.20250909125414-3aed155119a1
 )
 
@@ -102,7 +103,7 @@ require (
 	github.com/dblohm7/wingoes v0.0.0-20240119213807-a09d6be7affa // indirect
 	github.com/dgryski/go-camellia v0.0.0-20191119043421-69a8a13fb23d // indirect
 	github.com/dnsimple/dnsimple-go/v9 v9.1.0 // indirect
-	github.com/ebitengine/purego v0.10.0 // indirect
+	github.com/ebitengine/purego v0.10.2 // indirect
 	github.com/exoscale/egoscale/v3 v3.1.34 // indirect
 	github.com/fatih/structs v1.1.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
@@ -295,7 +296,6 @@ require (
 	github.com/sagernet/sing-openvpn v0.0.0-20260721005523-64b754d1c277 // indirect
 	github.com/sagernet/sing-shadowsocks2 v0.2.1 // indirect
 	github.com/sagernet/sing-snell v0.0.0-20260719094200-c43fbee0e839 // indirect
-	github.com/sagernet/sing-tun v0.8.12-0.20260724023008-68aa7bdc2819 // indirect
 	github.com/sagernet/sing-usbip v0.0.0-20260616101517-efb91521eddb // indirect
 	github.com/sagernet/smux v1.5.50-sing-box-mod.1 // indirect
 	github.com/sagernet/tailscale v1.92.4-sing-box-1.13-mod.7.0.20260717155615-b353b93d194a // indirect
