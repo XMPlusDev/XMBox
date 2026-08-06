@@ -32,7 +32,7 @@ require (
 	github.com/sagernet/sing-shadowsocks v0.2.9
 	github.com/sagernet/sing-shadowtls v0.2.1
 	github.com/sagernet/sing-tun v0.8.12-0.20260724023008-68aa7bdc2819
-	github.com/sagernet/sing-vmess v0.2.8-0.20250909125414-3aed155119a1
+	github.com/sagernet/sing-vmess v0.2.8
 )
 
 require (
