@@ -11,7 +11,7 @@ require (
 	github.com/go-acme/lego/v5 v5.3.1
 	github.com/go-resty/resty/v2 v2.17.2
 	github.com/gorilla/websocket v1.5.3
-	github.com/redis/go-redis/v9 v9.20.0
+	github.com/redis/go-redis/v9 v9.22.0
 	github.com/sagernet/sing v0.8.12-0.20260721063414-596db5dd6ef4
 	github.com/sagernet/sing-box v1.14.0-beta.1.0.20260725145838-f60f3728ce61
 	github.com/shirou/gopsutil/v4 v4.26.7
