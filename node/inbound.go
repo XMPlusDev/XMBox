@@ -238,8 +238,8 @@ func buildTransport(nodeInfo *api.NodeInfo) (*option.V2RayTransportOptions, erro
 
 	switch nodeInfo.NetworkSettings.Type {
 	case "tcp", "":
+	    t.Type = "http"
 		if nodeInfo.NetworkSettings.HeaderType == "http" {
-			t.Type = "http"
 			t.HTTPOptions.Method = nodeInfo.NetworkSettings.Method
 			t.HTTPOptions.Path = nodeInfo.NetworkSettings.Path
 			t.HTTPOptions.Host = badoption.Listable[string]([]string{nodeInfo.NetworkSettings.Host})

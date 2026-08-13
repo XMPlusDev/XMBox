@@ -171,6 +171,7 @@ func buildRelayTransport(relayNodeInfo *api.RelayNodeInfo) (*option.V2RayTranspo
 	t := &option.V2RayTransportOptions{Type: ns.Type}
 	switch ns.Type {
 	case "tcp", "":
+	    t.Type = "http"
 		return nil, nil
 	case "ws":
 		t.WebsocketOptions = option.V2RayWebsocketOptions{
