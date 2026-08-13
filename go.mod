@@ -12,7 +12,7 @@ require (
 	github.com/go-resty/resty/v2 v2.17.2
 	github.com/gorilla/websocket v1.5.3
 	github.com/redis/go-redis/v9 v9.22.0
-	github.com/sagernet/sing v0.8.12-0.20260721063414-596db5dd6ef4
+	github.com/sagernet/sing v0.9.0-beta.1
 	github.com/sagernet/sing-box v1.14.0-beta.1.0.20260725145838-f60f3728ce61
 	github.com/shirou/gopsutil/v4 v4.26.7
 	github.com/sirupsen/logrus v1.9.4
@@ -27,8 +27,8 @@ require (
 require (
 	github.com/anytls/sing-anytls v0.0.13
 	github.com/gofrs/uuid/v5 v5.5.1
-	github.com/sagernet/quic-go v0.59.0-sing-box-mod.5
-	github.com/sagernet/sing-quic v0.6.4-0.20260720125339-63fa6a7ebc31
+	github.com/sagernet/quic-go v0.61.0-sing-box-mod.4
+	github.com/sagernet/sing-quic v0.7.0-beta.2
 	github.com/sagernet/sing-shadowsocks v0.2.9
 	github.com/sagernet/sing-shadowtls v0.2.1
 	github.com/sagernet/sing-tun v0.8.12-0.20260724023008-68aa7bdc2819
