@@ -190,6 +190,10 @@ func getInboundOptions(tag string, nodeInfo *api.NodeInfo, config *Config) (opti
 		}
 
 	case "shadowtls":
+		wildcardSNI, err := parseWildcardSNI(nodeInfo.NetworkSettings.WildcardSNI)
+		if err != nil {
+			return option.Inbound{}, err
+		}
 		in.Type = "shadowtls"
 		in.Options = &option.ShadowTLSInboundOptions{
 			ListenOptions: listen,
@@ -197,8 +201,9 @@ func getInboundOptions(tag string, nodeInfo *api.NodeInfo, config *Config) (opti
 			// ShadowTLS v3 authenticates each user by their own password, so
 			// this field is free to carry the PSK of the inner shadowsocks
 			// layer that actually encrypts traffic and carries destinations.
-			Password:   nodeInfo.ServerKey,
-			StrictMode: nodeInfo.NetworkSettings.StrictMode,
+			Password:    nodeInfo.ServerKey,
+			StrictMode:  nodeInfo.NetworkSettings.StrictMode,
+			WildcardSNI: wildcardSNI,
 			Handshake: option.ShadowTLSHandshakeOptions{
 				ServerOptions: option.ServerOptions{
 					Server:     nodeInfo.NetworkSettings.HandshakeServer,
@@ -305,5 +310,22 @@ func getCertFile(certConfig *cert.CertConfig, tlsSettings *api.TlsSettings) (cer
 		return lego.HTTPCert(tlsSettings.CertMode, tlsSettings.CertDomainName, tlsSettings.CertEmail)
 	default:
 		return "", "", fmt.Errorf("unsupported certmode: %s", tlsSettings.CertMode)
+	}
+}
+
+// parseWildcardSNI maps the panel's wildcard_sni string onto sing-box's enum.
+// option.WildcardSNI only decodes from JSON, so the mapping is spelled out
+// here; an unrecognised value is rejected rather than silently treated as off,
+// since that would quietly change which site the node impersonates.
+func parseWildcardSNI(value string) (option.WildcardSNI, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "off":
+		return option.ShadowTLSWildcardSNIOff, nil
+	case "authed":
+		return option.ShadowTLSWildcardSNIAuthed, nil
+	case "all":
+		return option.ShadowTLSWildcardSNIAll, nil
+	default:
+		return option.ShadowTLSWildcardSNIOff, fmt.Errorf("unknown wildcard_sni %q: want off, authed, or all", value)
 	}
 }

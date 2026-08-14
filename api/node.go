@@ -322,6 +322,9 @@ func (c *Client) parseNetworkSettings(networkData *simplejson.Json, nodeInfo *No
 	if v, ok := networkData.CheckGet("strict_mode"); ok {
 		nodeInfo.NetworkSettings.StrictMode = v.MustBool()
 	}
+	if v, ok := networkData.CheckGet("wildcard_sni"); ok {
+		nodeInfo.NetworkSettings.WildcardSNI = v.MustString()
+	}
 
 	return nil
 }

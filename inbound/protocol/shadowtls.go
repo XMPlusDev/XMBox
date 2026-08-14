@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"context"
+	"encoding/base64"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -32,7 +33,12 @@ import (
 // behind a record header and an HMAC. Encrypting the inner layer is what keeps
 // the destination address and the traffic itself off the wire in cleartext, and
 // what makes the stream actually resemble the TLS it is imitating.
-const shadowTLSInnerMethod = "2022-blake3-aes-128-gcm"
+const (
+	shadowTLSInnerMethod = "2022-blake3-aes-128-gcm"
+	// shadowTLSInnerKeyLength is that cipher's key length; shadowaead_2022
+	// rejects a shorter PSK and derives a longer one down.
+	shadowTLSInnerKeyLength = 16
+)
 
 // ShadowTLSUser pairs a subscription's outer ShadowTLS credential with its key
 // for the inner shadowsocks layer. Both halves are per-user on purpose: the
@@ -75,9 +81,15 @@ type ShadowTLSInbound struct {
 	// service is swapped atomically on user changes
 	service atomic.Pointer[shadowtls.Service]
 
+	// user state — slots grow monotonically and are never reused, because the
+	// inner service identifies a connection by slot number and that number is
+	// the only thing tying routed traffic back to a subscription.
+	users    []ShadowTLSUser // indexed by slot; empty Name = deleted slot
+	slotMap  map[string]int  // Name → slot
+	nameSnap atomic.Pointer[[]string]
+
 	// base config — everything except Users; used to recreate the service
 	mu              sync.Mutex
-	users           []ShadowTLSUser
 	baseVersion     int
 	baseHandshake   shadowtls.HandshakeConfig
 	baseHSForSNI    map[string]shadowtls.HandshakeConfig
@@ -101,8 +113,9 @@ func newShadowTLSInbound(
 		Adapter: inbound.NewAdapter(C.TypeShadowTLS, tag),
 		// uot.NewRouter adds UDP-over-TCP support — the only way UDP reaches a
 		// TCP-only transport like ShadowTLS.
-		router: uot.NewRouter(router, logger),
-		logger: logger,
+		router:  uot.NewRouter(router, logger),
+		logger:  logger,
+		slotMap: make(map[string]int),
 	}
 	if options.Version == 0 {
 		options.Version = 1
@@ -170,7 +183,7 @@ func newShadowTLSInbound(
 	}
 
 	// Starts with no users, so this parks a nil service until AddUsers runs.
-	if err := h.rebuildService(); err != nil {
+	if err := h.rebuildService(nil); err != nil {
 		return nil, err
 	}
 
@@ -201,64 +214,101 @@ func (h *ShadowTLSInbound) Close() error {
 func (h *ShadowTLSInbound) AddUsers(users []ShadowTLSUser) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	idx := make(map[string]int, len(h.users))
-	for i, u := range h.users {
-		idx[u.Name] = i
-	}
 	for _, u := range users {
-		if i, ok := idx[u.Name]; ok {
+		if i, ok := h.slotMap[u.Name]; ok {
 			h.users[i] = u
 		} else {
-			idx[u.Name] = len(h.users)
+			h.slotMap[u.Name] = len(h.users)
 			h.users = append(h.users, u)
 		}
 	}
 	return h.rebuild()
 }
 
-// DelUsers removes users by Name from both layers.
+// DelUsers removes users by Name from both layers, tombstoning their slots.
 func (h *ShadowTLSInbound) DelUsers(names []string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	del := make(map[string]struct{}, len(names))
 	for _, n := range names {
-		del[n] = struct{}{}
-	}
-	remaining := h.users[:0]
-	for _, u := range h.users {
-		if _, ok := del[u.Name]; !ok {
-			remaining = append(remaining, u)
+		if i, ok := h.slotMap[n]; ok {
+			h.users[i] = ShadowTLSUser{}
+			delete(h.slotMap, n)
 		}
 	}
-	h.users = remaining
 	return h.rebuild()
 }
 
-// rebuild republishes the current user list to both layers. Caller must hold
-// h.mu. The inner layer is updated first so that a user is never accepted by
-// ShadowTLS before its key can decrypt the stream behind it.
-func (h *ShadowTLSInbound) rebuild() error {
-	if err := h.rebuildInner(); err != nil {
-		return err
+// userName resolves an inner-service slot back to its subscription tag.
+func (h *ShadowTLSInbound) userName(slot int) string {
+	snap := h.nameSnap.Load()
+	if snap == nil || slot < 0 || slot >= len(*snap) {
+		return ""
 	}
-	return h.rebuildService()
+	return (*snap)[slot]
 }
 
-// rebuildInner republishes the per-user inner PSKs.
+// rebuild republishes the current user list to both layers and refreshes the
+// slot→name snapshot. Caller must hold h.mu.
 //
-// Slot numbers are reassigned on every change, unlike ShadowsocksInbound which
-// keeps them stable. Nothing depends on them here: the inner layer only decides
-// whether a stream decrypts, while the accounting identity comes from the
-// ShadowTLS layer via the auth context. In-flight connections are unaffected —
-// the PSK map is consulted once per handshake, and established sessions hold
-// their own derived keys.
-func (h *ShadowTLSInbound) rebuildInner() error {
-	slots := make([]int, len(h.users))
-	passwords := make([]string, len(h.users))
+// A user whose inner key is unusable is dropped from both layers rather than
+// failing the whole batch: rejecting the batch would leave the node with the
+// user list it had before — in practice none — so one bad record would take
+// the entire node dark.
+func (h *ShadowTLSInbound) rebuild() error {
+	names := make([]string, len(h.users))
+	slots := make([]int, 0, len(h.users))
+	passwords := make([]string, 0, len(h.users))
+	outer := make([]shadowtls.User, 0, len(h.users))
+
 	for i, u := range h.users {
-		slots[i] = i
-		passwords[i] = u.InnerPassword
+		if u.Name == "" {
+			continue // tombstoned slot
+		}
+		if err := validInnerKey(u.InnerPassword); err != nil {
+			h.logger.Warn("user ", u.Name, " rejected: ", err)
+			continue
+		}
+		names[i] = u.Name
+		slots = append(slots, i)
+		passwords = append(passwords, u.InnerPassword)
+		outer = append(outer, shadowtls.User{Name: u.Name, Password: u.Password})
 	}
+
+	// Published before the services so a connection can never resolve a slot
+	// the snapshot does not know about yet.
+	h.nameSnap.Store(&names)
+
+	if len(outer) == 0 && len(h.slotMap) > 0 {
+		h.logger.Warn("no user has a usable inner key; all connections will be refused")
+	}
+	if err := h.rebuildInner(slots, passwords); err != nil {
+		return err
+	}
+	return h.rebuildService(outer)
+}
+
+// validInnerKey reports whether password is usable as a shadowTLSInnerMethod
+// PSK, mirroring what shadowaead_2022 accepts: base64 that decodes to at least
+// the cipher's key length. Checked here so one bad record names itself in the
+// log instead of failing the batch anonymously.
+func validInnerKey(password string) error {
+	if password == "" {
+		return E.New("inner key is empty")
+	}
+	key, err := base64.StdEncoding.DecodeString(password)
+	if err != nil {
+		return E.Cause(err, "inner key is not base64")
+	}
+	if len(key) < shadowTLSInnerKeyLength {
+		return E.New("inner key decodes to ", len(key), " bytes, need at least ", shadowTLSInnerKeyLength)
+	}
+	return nil
+}
+
+// rebuildInner republishes the per-user inner PSKs. In-flight connections are
+// unaffected: the PSK map is consulted once per handshake, and established
+// sessions hold their own derived keys.
+func (h *ShadowTLSInbound) rebuildInner(slots []int, passwords []string) error {
 	if err := h.inner.UpdateUsersWithPasswords(slots, passwords); err != nil {
 		return E.Cause(err, "update inner shadowsocks users")
 	}
@@ -273,14 +323,10 @@ func (h *ShadowTLSInbound) rebuildInner() error {
 // empty at that point and again if every user is later removed. Store a nil
 // service for that window instead of failing — NewConnection rejects incoming
 // connections until AddUsers supplies a user and the service is built.
-func (h *ShadowTLSInbound) rebuildService() error {
-	if h.baseVersion == 3 && len(h.users) == 0 {
+func (h *ShadowTLSInbound) rebuildService(outer []shadowtls.User) error {
+	if h.baseVersion == 3 && len(outer) == 0 {
 		h.service.Store(nil)
 		return nil
-	}
-	outer := make([]shadowtls.User, len(h.users))
-	for i, u := range h.users {
-		outer[i] = shadowtls.User{Name: u.Name, Password: u.Password}
 	}
 	svc, err := shadowtls.NewService(shadowtls.ServiceConfig{
 		Version: h.baseVersion,
@@ -304,7 +350,10 @@ func (h *ShadowTLSInbound) rebuildService() error {
 func (h *ShadowTLSInbound) NewConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
 	svc := h.service.Load()
 	if svc == nil {
-		h.logger.DebugContext(ctx, "connection rejected: no users")
+		// Warn, not debug: a node that is listening but holds no users refuses
+		// every connection, and at default log level a debug line would make
+		// that look like the traffic vanished after being accepted.
+		h.logger.WarnContext(ctx, "connection refused: inbound has no users")
 		N.CloseOnHandshakeFailure(conn, onClose, E.New("no users"))
 		return
 	}
@@ -342,12 +391,19 @@ func (h *shadowtlsHandler) NewConnectionEx(ctx context.Context, conn net.Conn, s
 
 // ─── routing after the inner header is parsed ────────────────────────────────
 
+// newConnection routes the stream once the inner header is parsed.
+//
+// The user comes from the inner service's slot, not from the ShadowTLS name
+// that sing-shadowtls put in the context: shadowaead_2022 overwrites that entry
+// with its own int slot (service_multi.go:255), so reading it as a string finds
+// nothing and traffic would be attributed to no one.
 func (h *ShadowTLSInbound) newConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext) error {
 	metadata.Inbound = h.Tag()
 	metadata.InboundType = h.Type()
 	//nolint:staticcheck
 	metadata.InboundDetour = h.listener.ListenOptions().Detour
-	if userName, _ := auth.UserFromContext[string](ctx); userName != "" {
+	slot, _ := auth.UserFromContext[int](ctx)
+	if userName := h.userName(slot); userName != "" {
 		metadata.User = userName
 		h.logger.InfoContext(ctx, "[", userName, "] inbound connection to ", metadata.Destination)
 	} else {
@@ -362,7 +418,8 @@ func (h *ShadowTLSInbound) newPacketConnection(ctx context.Context, conn N.Packe
 	//nolint:staticcheck
 	metadata.InboundDetour = h.listener.ListenOptions().Detour
 	ctx = log.ContextWithNewID(ctx)
-	userName, _ := auth.UserFromContext[string](ctx)
+	slot, _ := auth.UserFromContext[int](ctx)
+	userName := h.userName(slot)
 	if userName != "" {
 		metadata.User = userName
 	}

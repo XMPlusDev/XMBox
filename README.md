@@ -123,6 +123,7 @@ Fallback redirect unrecognised or non-matching connections to another local serv
   "padding_scheme": [],
   //shadowtls
   "strict_mode": false,
+  "wildcard_sni": "all",
   "handshake_server": "www.microsoft.com",
   "handshake_server_port": 443
 }
@@ -169,6 +170,7 @@ Fallback redirect unrecognised or non-matching connections to another local serv
   "padding_scheme": [],
   //shadowtls
   "strict_mode": false,
+  "wildcard_sni": "all",
   "handshake_server": "www.microsoft.com",
   "handshake_server_port": 443
 }
@@ -215,6 +217,7 @@ Fallback redirect unrecognised or non-matching connections to another local serv
   "padding_scheme": [],
   //shadowtls
   "strict_mode": false,
+  "wildcard_sni": "all",
   "handshake_server": "www.microsoft.com",
   "handshake_server_port": 443
 }
@@ -257,6 +260,7 @@ Fallback redirect unrecognised or non-matching connections to another local serv
   "padding_scheme": [],
   //shadowtls
   "strict_mode": false,
+  "wildcard_sni": "all",
   "handshake_server": "www.microsoft.com",
   "handshake_server_port": 443
 }
@@ -299,6 +303,7 @@ Fallback redirect unrecognised or non-matching connections to another local serv
   "padding_scheme": [],
   //shadowtls
   "strict_mode": false,
+  "wildcard_sni": "all",
   "handshake_server": "www.microsoft.com",
   "handshake_server_port": 443
 }
@@ -342,6 +347,7 @@ Fallback redirect unrecognised or non-matching connections to another local serv
   "padding_scheme": [],
   //shadowtls
   "strict_mode": false,
+  "wildcard_sni": "all",
   "handshake_server": "www.microsoft.com",
   "handshake_server_port": 443
 }

@@ -135,6 +135,10 @@ type NetworkSettings struct {
 	HandshakeServer string
 	HandshakePort   uint16
 	StrictMode      bool
+	// WildcardSNI is "off", "authed", or "all". When not "off" the handshake
+	// target becomes the client's own SNI on port 443 instead of
+	// HandshakeServer, so each client picks the site it impersonates.
+	WildcardSNI string
 
 	// AnyTLS
 	PaddingScheme []string
