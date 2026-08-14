@@ -2,7 +2,6 @@ package protocol
 
 import (
 	"context"
-	"encoding/base64"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -11,12 +10,9 @@ import (
 	"github.com/sagernet/sing-box/adapter/inbound"
 	"github.com/sagernet/sing-box/common/dialer"
 	"github.com/sagernet/sing-box/common/listener"
-	"github.com/sagernet/sing-box/common/uot"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
-	shadowsocks "github.com/sagernet/sing-shadowsocks"
-	"github.com/sagernet/sing-shadowsocks/shadowaead_2022"
 	shadowtls "github.com/sagernet/sing-shadowtls"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/auth"
@@ -24,73 +20,42 @@ import (
 	"github.com/sagernet/sing/common/logger"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
-	"github.com/sagernet/sing/common/ntp"
 )
 
-// shadowTLSInnerMethod is the cipher of the inner shadowsocks layer. ShadowTLS
-// v3 authenticates users and frames the stream as TLS records, but it does not
-// encrypt the payload — verifiedConn.write puts the bytes on the wire verbatim
-// behind a record header and an HMAC. Encrypting the inner layer is what keeps
-// the destination address and the traffic itself off the wire in cleartext, and
-// what makes the stream actually resemble the TLS it is imitating.
-const (
-	shadowTLSInnerMethod = "2022-blake3-aes-128-gcm"
-	// shadowTLSInnerKeyLength is that cipher's key length; shadowaead_2022
-	// rejects a shorter PSK and derives a longer one down.
-	shadowTLSInnerKeyLength = 16
-)
-
-// ShadowTLSUser pairs a subscription's outer ShadowTLS credential with its key
-// for the inner shadowsocks layer. Both halves are per-user on purpose: the
-// outer one authenticates the connection, and the inner one keeps a user's
-// traffic unreadable to every *other* user, since session keys derive from the
-// per-user PSK (shadowaead_2022/service_multi.go:177) rather than from the
-// node-wide identity key.
-type ShadowTLSUser struct {
-	Name          string
-	Password      string
-	InnerPassword string
-}
-
-// ShadowTLSInbound is a full sing-box ShadowTLS inbound with zero-downtime
-// user management. The shadowtls.Service is recreated and swapped atomically
-// on user changes — the listener and TLS layer never restart.
+// ShadowTLSInbound is a sing-box ShadowTLS inbound with zero-downtime user
+// management. The shadowtls.Service is recreated and swapped atomically on user
+// changes — the listener and TLS layer never restart.
+//
+// ShadowTLS is a TLS-camouflage transport, not a proxy. It carries no
+// destination address and does not encrypt its payload: verifiedConn puts bytes
+// on the wire verbatim behind a TLS record header and an HMAC. So it never
+// stands alone. Once the handshake completes, the unwrapped stream is handed to
+// the inbound named by Detour, which is the node's real protocol; that inbound
+// reads the destination, decrypts the payload and identifies the user. Routing
+// a ShadowTLS inbound without a detour would send every connection to the
+// listener's own address, since shadowtls.Service echoes back whatever
+// destination it was given.
 //
 // Connection-safety guarantee: existing connections are NEVER closed when users
-// are removed.  shadowtls.Service has no UpdateUsers method, so we rebuild a
-// new service object and atomically swap the pointer.  Goroutines that are
-// mid-handshake on the OLD service continue running to completion: they hold a
-// reference to the old service via closure, keeping it alive in the GC until
-// all those goroutines finish.  After the handshake, the routed connection is
-// owned by the router goroutine — entirely independent of whichever service
-// pointer h.service currently holds.
+// are removed. shadowtls.Service has no UpdateUsers method, so we rebuild a new
+// service object and atomically swap the pointer. Goroutines mid-handshake on
+// the OLD service run to completion: they hold a reference to it via closure,
+// keeping it alive until they finish. After the handshake the routed connection
+// is owned by the router goroutine, independent of h.service.
 type ShadowTLSInbound struct {
 	inbound.Adapter
-	router   adapter.ConnectionRouterEx
+	router   adapter.Router
 	logger   logger.ContextLogger
 	listener *listener.Listener
-
-	// inner decrypts the tunnelled stream and parses the destination out of it.
-	// ShadowTLS is a TLS-camouflage transport and carries no destination of its
-	// own — shadowtls.Service hands the handler back whatever destination it was
-	// given, which for a plain TCP listener is this node's own listen address.
-	// The real target comes from the shadowsocks header the client's inner
-	// shadowsocks outbound writes inside the tunnel.
-	inner shadowsocks.MultiService[int]
 
 	// service is swapped atomically on user changes
 	service atomic.Pointer[shadowtls.Service]
 
-	// user state — slots grow monotonically and are never reused, because the
-	// inner service identifies a connection by slot number and that number is
-	// the only thing tying routed traffic back to a subscription.
-	users    []ShadowTLSUser // indexed by slot; empty Name = deleted slot
-	slotMap  map[string]int  // Name → slot
-	nameSnap atomic.Pointer[[]string]
-
 	// base config — everything except Users; used to recreate the service
 	mu              sync.Mutex
+	users           []option.ShadowTLSUser
 	baseVersion     int
+	basePassword    string // v1/v2 single shared password
 	baseHandshake   shadowtls.HandshakeConfig
 	baseHSForSNI    map[string]shadowtls.HandshakeConfig
 	baseStrictMode  bool
@@ -111,45 +76,17 @@ func newShadowTLSInbound(
 ) (adapter.Inbound, error) {
 	h := &ShadowTLSInbound{
 		Adapter: inbound.NewAdapter(C.TypeShadowTLS, tag),
-		// uot.NewRouter adds UDP-over-TCP support — the only way UDP reaches a
-		// TCP-only transport like ShadowTLS.
-		router:  uot.NewRouter(router, logger),
+		router:  router,
 		logger:  logger,
-		slotMap: make(map[string]int),
 	}
+
 	if options.Version == 0 {
 		options.Version = 1
 	}
-	if options.Version != 3 {
-		return nil, E.New("unsupported shadowtls version: ", options.Version, " (only version 3 provides per-user authentication)")
-	}
 	h.baseVersion = options.Version
+	h.basePassword = options.Password
 	h.baseStrictMode = options.StrictMode
 	h.baseWildcardSNI = shadowtls.WildcardSNI(options.WildcardSNI)
-
-	// options.Password carries the inner shadowsocks identity key (iPSK), not a
-	// ShadowTLS secret: under v3 every client is authenticated by its own entry
-	// in Users, and sing-shadowtls reads ServiceConfig.Password only on the v2
-	// path (service.go:146). node/inbound.go fills it from the node's ServerKey.
-	// Per-user keys are layered on top of it by rebuildInner.
-	innerService, err := shadowaead_2022.NewMultiServiceWithPassword[int](
-		shadowTLSInnerMethod,
-		options.Password,
-		int64(C.UDPTimeout.Seconds()),
-		adapter.NewLegacyUpstreamHandler(adapter.InboundContext{}, h.newConnection, h.newPacketConnection, h),
-		ntp.TimeFuncFromContext(ctx),
-	)
-	if err != nil {
-		return nil, E.Cause(err, "create inner shadowsocks service (", shadowTLSInnerMethod, " needs a base64 key of 16 bytes or more; longer keys are derived down)")
-	}
-	h.inner = innerService
-
-	// Users carry two secrets and inbound options can only express one, so they
-	// have to arrive through AddUsers. XMBox always creates nodes empty and
-	// fills them from the subscription list.
-	if len(options.Users) > 0 {
-		return nil, E.New("shadowtls users cannot be set in inbound options: the inner shadowsocks key has no field there")
-	}
 
 	var handshakeForServerName map[string]shadowtls.HandshakeConfig
 	if options.Version > 1 {
@@ -182,8 +119,10 @@ func newShadowTLSInbound(
 		Dialer: handshakeDialer,
 	}
 
-	// Starts with no users, so this parks a nil service until AddUsers runs.
-	if err := h.rebuildService(nil); err != nil {
+	// Initial users (v3 only; v1/v2 use a single shared password).
+	h.users = options.Users
+
+	if err := h.rebuildService(); err != nil {
 		return nil, err
 	}
 
@@ -210,109 +149,41 @@ func (h *ShadowTLSInbound) Close() error {
 
 // ─── hot user management ─────────────────────────────────────────────────────
 
-// AddUsers upserts users by Name across both layers.
-func (h *ShadowTLSInbound) AddUsers(users []ShadowTLSUser) error {
+// AddUsers upserts ShadowTLS users by Name (v3 only; recreates service atomically).
+func (h *ShadowTLSInbound) AddUsers(users []option.ShadowTLSUser) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	idx := make(map[string]int, len(h.users))
+	for i, u := range h.users {
+		idx[u.Name] = i
+	}
 	for _, u := range users {
-		if i, ok := h.slotMap[u.Name]; ok {
+		if i, ok := idx[u.Name]; ok {
 			h.users[i] = u
 		} else {
-			h.slotMap[u.Name] = len(h.users)
+			idx[u.Name] = len(h.users)
 			h.users = append(h.users, u)
 		}
 	}
-	return h.rebuild()
+	return h.rebuildService()
 }
 
-// DelUsers removes users by Name from both layers, tombstoning their slots.
+// DelUsers removes ShadowTLS users by Name (v3 only; recreates service atomically).
 func (h *ShadowTLSInbound) DelUsers(names []string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	del := make(map[string]struct{}, len(names))
 	for _, n := range names {
-		if i, ok := h.slotMap[n]; ok {
-			h.users[i] = ShadowTLSUser{}
-			delete(h.slotMap, n)
+		del[n] = struct{}{}
+	}
+	remaining := h.users[:0]
+	for _, u := range h.users {
+		if _, ok := del[u.Name]; !ok {
+			remaining = append(remaining, u)
 		}
 	}
-	return h.rebuild()
-}
-
-// userName resolves an inner-service slot back to its subscription tag.
-func (h *ShadowTLSInbound) userName(slot int) string {
-	snap := h.nameSnap.Load()
-	if snap == nil || slot < 0 || slot >= len(*snap) {
-		return ""
-	}
-	return (*snap)[slot]
-}
-
-// rebuild republishes the current user list to both layers and refreshes the
-// slot→name snapshot. Caller must hold h.mu.
-//
-// A user whose inner key is unusable is dropped from both layers rather than
-// failing the whole batch: rejecting the batch would leave the node with the
-// user list it had before — in practice none — so one bad record would take
-// the entire node dark.
-func (h *ShadowTLSInbound) rebuild() error {
-	names := make([]string, len(h.users))
-	slots := make([]int, 0, len(h.users))
-	passwords := make([]string, 0, len(h.users))
-	outer := make([]shadowtls.User, 0, len(h.users))
-
-	for i, u := range h.users {
-		if u.Name == "" {
-			continue // tombstoned slot
-		}
-		if err := validInnerKey(u.InnerPassword); err != nil {
-			h.logger.Warn("user ", u.Name, " rejected: ", err)
-			continue
-		}
-		names[i] = u.Name
-		slots = append(slots, i)
-		passwords = append(passwords, u.InnerPassword)
-		outer = append(outer, shadowtls.User{Name: u.Name, Password: u.Password})
-	}
-
-	// Published before the services so a connection can never resolve a slot
-	// the snapshot does not know about yet.
-	h.nameSnap.Store(&names)
-
-	if len(outer) == 0 && len(h.slotMap) > 0 {
-		h.logger.Warn("no user has a usable inner key; all connections will be refused")
-	}
-	if err := h.rebuildInner(slots, passwords); err != nil {
-		return err
-	}
-	return h.rebuildService(outer)
-}
-
-// validInnerKey reports whether password is usable as a shadowTLSInnerMethod
-// PSK, mirroring what shadowaead_2022 accepts: base64 that decodes to at least
-// the cipher's key length. Checked here so one bad record names itself in the
-// log instead of failing the batch anonymously.
-func validInnerKey(password string) error {
-	if password == "" {
-		return E.New("inner key is empty")
-	}
-	key, err := base64.StdEncoding.DecodeString(password)
-	if err != nil {
-		return E.Cause(err, "inner key is not base64")
-	}
-	if len(key) < shadowTLSInnerKeyLength {
-		return E.New("inner key decodes to ", len(key), " bytes, need at least ", shadowTLSInnerKeyLength)
-	}
-	return nil
-}
-
-// rebuildInner republishes the per-user inner PSKs. In-flight connections are
-// unaffected: the PSK map is consulted once per handshake, and established
-// sessions hold their own derived keys.
-func (h *ShadowTLSInbound) rebuildInner(slots []int, passwords []string) error {
-	if err := h.inner.UpdateUsersWithPasswords(slots, passwords); err != nil {
-		return E.Cause(err, "update inner shadowsocks users")
-	}
-	return nil
+	h.users = remaining
+	return h.rebuildService()
 }
 
 // rebuildService recreates shadowtls.Service with the current user list and
@@ -321,16 +192,19 @@ func (h *ShadowTLSInbound) rebuildInner(slots []int, passwords []string) error {
 // v3 requires at least one user: shadowtls.NewService rejects an empty list.
 // Nodes are created before their subscriptions are fetched, so the user list is
 // empty at that point and again if every user is later removed. Store a nil
-// service for that window instead of failing — NewConnection rejects incoming
+// service for that window instead of failing — NewConnection refuses incoming
 // connections until AddUsers supplies a user and the service is built.
-func (h *ShadowTLSInbound) rebuildService(outer []shadowtls.User) error {
-	if h.baseVersion == 3 && len(outer) == 0 {
+func (h *ShadowTLSInbound) rebuildService() error {
+	if h.baseVersion == 3 && len(h.users) == 0 {
 		h.service.Store(nil)
 		return nil
 	}
 	svc, err := shadowtls.NewService(shadowtls.ServiceConfig{
-		Version: h.baseVersion,
-		Users:   outer,
+		Version:  h.baseVersion,
+		Password: h.basePassword,
+		Users: common.Map(h.users, func(it option.ShadowTLSUser) shadowtls.User {
+			return (shadowtls.User)(it)
+		}),
 		Handshake:              h.baseHandshake,
 		HandshakeForServerName: h.baseHSForSNI,
 		StrictMode:             h.baseStrictMode,
@@ -372,66 +246,30 @@ func (h *ShadowTLSInbound) NewConnection(ctx context.Context, conn net.Conn, met
 
 type shadowtlsHandler ShadowTLSInbound
 
-// NewConnectionEx receives the stream once the ShadowTLS handshake is done. The
-// destination argument is not the client's target — shadowtls.Service echoes
-// back whatever it was handed — so it is discarded and the real destination is
-// read from the inner shadowsocks header instead. Auth already happened at the
-// ShadowTLS layer; the user name rides along in ctx.
+// NewConnectionEx receives the stream once the ShadowTLS handshake is done and
+// hands it to the detour inbound, which reads the real destination out of it.
+// The destination argument is discarded: shadowtls.Service echoes back whatever
+// it was given, so it holds this listener's own address rather than the
+// client's target. Detour is set on the metadata for the router to act on;
+// without it the router would try to route to that useless destination.
 func (h *shadowtlsHandler) NewConnectionEx(ctx context.Context, conn net.Conn, source M.Socksaddr, _ M.Socksaddr, onClose N.CloseHandlerFunc) {
-	err := h.inner.NewConnection(ctx, conn, M.Metadata{Source: source})
-	N.CloseOnHandshakeFailure(conn, onClose, err)
-	if err != nil {
-		if E.IsClosedOrCanceled(err) {
-			h.logger.DebugContext(ctx, "connection closed: ", err)
-		} else {
-			h.logger.ErrorContext(ctx, E.Cause(err, "process connection from ", source))
-		}
-	}
-}
-
-// ─── routing after the inner header is parsed ────────────────────────────────
-
-// newConnection routes the stream once the inner header is parsed.
-//
-// The user comes from the inner service's slot, not from the ShadowTLS name
-// that sing-shadowtls put in the context: shadowaead_2022 overwrites that entry
-// with its own int slot (service_multi.go:255), so reading it as a string finds
-// nothing and traffic would be attributed to no one.
-func (h *ShadowTLSInbound) newConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext) error {
+	var metadata adapter.InboundContext
 	metadata.Inbound = h.Tag()
 	metadata.InboundType = h.Type()
 	//nolint:staticcheck
 	metadata.InboundDetour = h.listener.ListenOptions().Detour
-	slot, _ := auth.UserFromContext[int](ctx)
-	if userName := h.userName(slot); userName != "" {
-		metadata.User = userName
-		h.logger.InfoContext(ctx, "[", userName, "] inbound connection to ", metadata.Destination)
-	} else {
-		h.logger.InfoContext(ctx, "inbound connection to ", metadata.Destination)
-	}
-	return h.router.RouteConnection(ctx, conn, metadata)
-}
-
-func (h *ShadowTLSInbound) newPacketConnection(ctx context.Context, conn N.PacketConn, metadata adapter.InboundContext) error {
-	metadata.Inbound = h.Tag()
-	metadata.InboundType = h.Type()
 	//nolint:staticcheck
-	metadata.InboundDetour = h.listener.ListenOptions().Detour
-	ctx = log.ContextWithNewID(ctx)
-	slot, _ := auth.UserFromContext[int](ctx)
-	userName := h.userName(slot)
-	if userName != "" {
-		metadata.User = userName
-	}
-	h.logger.InfoContext(ctx, "[", userName, "] inbound packet connection to ", metadata.Destination)
-	return h.router.RoutePacketConnection(ctx, conn, metadata)
-}
-
-func (h *ShadowTLSInbound) NewError(ctx context.Context, err error) {
-	common.Close(err)
-	if E.IsClosedOrCanceled(err) {
-		h.logger.DebugContext(ctx, "connection closed: ", err)
+	metadata.Source = source
+	if metadata.InboundDetour == "" {
+		h.logger.ErrorContext(ctx, "connection dropped: no detour configured, ShadowTLS carries no destination of its own")
+		N.CloseOnHandshakeFailure(conn, onClose, E.New("missing detour"))
 		return
 	}
-	h.logger.ErrorContext(ctx, err)
+	// Logged here rather than at the detour inbound because this is the only
+	// place the ShadowTLS user name is visible; the inner protocol identifies
+	// the user by its own credential.
+	if userName, _ := auth.UserFromContext[string](ctx); userName != "" {
+		h.logger.InfoContext(ctx, "[", userName, "] authenticated, forwarding to ", metadata.InboundDetour)
+	}
+	h.router.RouteConnectionEx(ctx, conn, metadata, onClose)
 }

@@ -34,9 +34,9 @@ type PostData struct {
 // serverConfig is the raw response from /api/server/info/{id}.
 type serverConfig struct {
 	server         `json:"server"`
-	transitServer `json:"transit_server"`
-	UpdateInterval int `json:"update_interval"`
-	Version        int `json:"api_version"`
+	transitServer  `json:"transit_server"`
+	UpdateInterval int      `json:"update_interval"`
+	Version        int      `json:"api_version"`
 	IgnoreIPs      []string `json:"ignore_ips"`
 }
 
@@ -86,13 +86,39 @@ type SubscriptionResponse struct {
 
 // Subscription is the raw subscription record from the panel.
 type Subscription struct {
-	Id           int    `json:"id"`
-	UUID         string `json:"uuid"`
-	Passwd       string `json:"passwd"`
-	Email        string `json:"email"`
-	Speedlimit   int    `json:"speed_limit"`
-	Iplimit      int    `json:"ip_limit"`
+	Id         int    `json:"id"`
+	UUID       string `json:"uuid"`
+	Passwd     string `json:"passwd"`
+	Email      string `json:"email"`
+	Speedlimit int    `json:"speed_limit"`
+	Iplimit    int    `json:"ip_limit"`
 }
+
+// ShadowTLSSettings fronts a node's real protocol with a ShadowTLS listener.
+//
+// ShadowTLS is a TLS-camouflage transport, not a proxy: it carries no
+// destination and does not encrypt its payload. It therefore never stands
+// alone — the node's own protocol keeps carrying destinations, encryption and
+// user identity behind it, reached over a loopback detour.
+type ShadowTLSSettings struct {
+	Version         int
+	HandshakeServer string
+	HandshakePort   uint16
+	StrictMode      bool
+	// WildcardSNI is "off", "authed", or "all". When not "off" the handshake
+	// target becomes the client's own SNI on port 443 instead of
+	// HandshakeServer, so each client picks the site it impersonates.
+	WildcardSNI string
+}
+
+// ShadowTLSTag returns the tag of the ShadowTLS listener fronting a node.
+//
+// The node tag stays on the protocol inbound behind it, so traffic accounting,
+// limiters and connection tracking — all keyed on metadata.Inbound, which the
+// router rewrites to the detour target — keep working unchanged. It lives here
+// because both the node and subscription packages need it and node already
+// imports subscription.
+func ShadowTLSTag(tag string) string { return tag + "_shadowtls" }
 
 // NetworkSettings holds parsed transport-layer settings.
 type NetworkSettings struct {
@@ -102,9 +128,9 @@ type NetworkSettings struct {
 	Cipher string
 
 	// WebSocket / HTTP / HTTPUpgrade
-	Path      string
-	Host      string
-	Method    string
+	Path       string
+	Host       string
+	Method     string
 	HeaderType string
 	Headers    map[string]string
 
@@ -131,14 +157,9 @@ type NetworkSettings struct {
 	// VLESS
 	Flow string
 
-	// ShadowTLS
-	HandshakeServer string
-	HandshakePort   uint16
-	StrictMode      bool
-	// WildcardSNI is "off", "authed", or "all". When not "off" the handshake
-	// target becomes the client's own SNI on port 443 instead of
-	// HandshakeServer, so each client picks the site it impersonates.
-	WildcardSNI string
+	// ShadowTLS is non-nil when the node's protocol is fronted by a ShadowTLS
+	// listener. See ShadowTLSSettings.
+	ShadowTLS *ShadowTLSSettings
 
 	// AnyTLS
 	PaddingScheme []string
@@ -149,15 +170,15 @@ type NetworkSettings struct {
 
 // TlsSettings holds TLS and Reality configuration.
 type TlsSettings struct {
-	Type     string
-	Enabled  bool
-	CertMode string
+	Type           string
+	Enabled        bool
+	CertMode       string
 	CertDomainName string
-	CertEmail  string
-	ServerName string
-	Alpn       []string
-	EnabledECH bool
-	ECHKey     []string
+	CertEmail      string
+	ServerName     string
+	Alpn           []string
+	EnabledECH     bool
+	ECHKey         []string
 
 	RealityEnabled    bool
 	RealityPrivateKey string
@@ -173,8 +194,8 @@ type TlsSettings struct {
 // FallbackConfig describes a single inbound fallback destination.
 // Only used for trojan (and optionally vless) protocol nodes.
 type FallbackConfig struct {
-	Server     string 
-	ServerPort uint16 
+	Server     string
+	ServerPort uint16
 }
 
 // NodeInfo is the parsed node configuration returned by GetNodeInfo.
@@ -190,9 +211,9 @@ type NodeInfo struct {
 	TCPFastOpen     bool
 	TlsSettings     *TlsSettings
 	NetworkSettings *NetworkSettings
-	FallbackConfig *FallbackConfig
-	RelayType   int
-	RelayNodeID int
+	FallbackConfig  *FallbackConfig
+	RelayType       int
+	RelayNodeID     int
 }
 
 // RelayNodeInfo describes a downstream relay target that per-subscription
@@ -210,12 +231,12 @@ type RelayNodeInfo struct {
 
 // SubscriptionInfo is the parsed per-user record used by the controller.
 type SubscriptionInfo struct {
-	Id           int
-	UUID         string
-	Passwd       string
-	Email        string
-	SpeedLimit   uint64
-	IPLimit      int
+	Id         int
+	UUID       string
+	Passwd     string
+	Email      string
+	SpeedLimit uint64
+	IPLimit    int
 }
 
 // OnlineIP represents a currently connected IP address for a subscription.

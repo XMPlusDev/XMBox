@@ -312,21 +312,40 @@ func (c *Client) parseNetworkSettings(networkData *simplejson.Json, nodeInfo *No
 		nodeInfo.NetworkSettings.PaddingScheme = a
 	}
 
-	// ShadowTLS
-	if v, ok := networkData.CheckGet("handshake_server"); ok {
-		nodeInfo.NetworkSettings.HandshakeServer = v.MustString()
-	}
-	if v, ok := networkData.CheckGet("handshake_server_port"); ok {
-		nodeInfo.NetworkSettings.HandshakePort = uint16(v.MustInt())
-	}
-	if v, ok := networkData.CheckGet("strict_mode"); ok {
-		nodeInfo.NetworkSettings.StrictMode = v.MustBool()
-	}
-	if v, ok := networkData.CheckGet("wildcard_sni"); ok {
-		nodeInfo.NetworkSettings.WildcardSNI = v.MustString()
+	// ShadowTLS. A nested "shadowtls" object fronts whatever protocol the node
+	// runs; its presence is what enables the wrapper. The flat keys are the
+	// older shape, kept for nodes whose protocol is itself "shadowtls".
+	if v, ok := networkData.CheckGet("shadowtls"); ok {
+		nodeInfo.NetworkSettings.ShadowTLS = parseShadowTLSSettings(v)
+	} else if _, ok := networkData.CheckGet("handshake_server"); ok {
+		nodeInfo.NetworkSettings.ShadowTLS = parseShadowTLSSettings(networkData)
 	}
 
 	return nil
+}
+
+// parseShadowTLSSettings reads the ShadowTLS block, which appears either as a
+// nested object or as flat keys on networkSettings.
+func parseShadowTLSSettings(data *simplejson.Json) *ShadowTLSSettings {
+	settings := &ShadowTLSSettings{Version: 3}
+	if v, ok := data.CheckGet("version"); ok {
+		if version := v.MustInt(); version != 0 {
+			settings.Version = version
+		}
+	}
+	if v, ok := data.CheckGet("handshake_server"); ok {
+		settings.HandshakeServer = v.MustString()
+	}
+	if v, ok := data.CheckGet("handshake_server_port"); ok {
+		settings.HandshakePort = uint16(v.MustInt())
+	}
+	if v, ok := data.CheckGet("strict_mode"); ok {
+		settings.StrictMode = v.MustBool()
+	}
+	if v, ok := data.CheckGet("wildcard_sni"); ok {
+		settings.WildcardSNI = v.MustString()
+	}
+	return settings
 }
 
 func (c *Client) parseSecuritySettings(securityData *simplejson.Json, nodeInfo *NodeInfo) error {

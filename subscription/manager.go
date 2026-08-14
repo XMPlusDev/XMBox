@@ -11,7 +11,7 @@ import (
 
 	"github.com/xmplusdev/xmbox/api"
 	"github.com/xmplusdev/xmbox/counter"
-	inboundprotocol "github.com/xmplusdev/xmbox/inbound/protocol"
+
 	"github.com/xmplusdev/xmbox/instance"
 	"github.com/xmplusdev/xmbox/limiter"
 )
@@ -38,8 +38,45 @@ func (m *Manager) AddSubscriptions(subscriptionInfo *[]api.SubscriptionInfo, nod
 		return errors.New("inbound not found: " + tag)
 	}
 
-	protocol := strings.ToLower(nodeInfo.Protocol)
-	return m.Add(subscriptionInfo, ib, protocol, nodeInfo.NetworkSettings.Flow, nodeInfo.NetworkSettings.Cipher, tag)
+	protocol := InnerProtocol(nodeInfo.Protocol)
+	if err := m.Add(subscriptionInfo, ib, protocol, nodeInfo.NetworkSettings.Flow, nodeInfo.NetworkSettings.Cipher, tag); err != nil {
+		return err
+	}
+	// A ShadowTLS-fronted node authenticates twice: the wrapper admits the
+	// connection, the protocol behind it identifies the subscription.
+	if nodeInfo.NetworkSettings.ShadowTLS != nil {
+		return m.addShadowTLSUsers(subscriptionInfo, tag)
+	}
+	return nil
+}
+
+// InnerProtocol maps a node's declared protocol onto the one that actually
+// carries traffic. A node typed "shadowtls" predates ShadowTLS becoming an
+// option on any protocol and always meant shadowsocks behind it.
+func InnerProtocol(protocol string) string {
+	if p := strings.ToLower(protocol); p != "shadowtls" {
+		return p
+	}
+	return "shadowsocks"
+}
+
+// addShadowTLSUsers registers subscriptions with the ShadowTLS listener
+// fronting a node, keyed by the same user tag as the protocol behind it.
+func (m *Manager) addShadowTLSUsers(subscriptions *[]api.SubscriptionInfo, tag string) error {
+	frontTag := api.ShadowTLSTag(tag)
+	ib, found := m.coreInstance.GetInbound(frontTag)
+	if !found {
+		return errors.New("inbound not found: " + frontTag)
+	}
+	mgr, ok := ib.(ShadowTLSUserManager)
+	if !ok {
+		return fmt.Errorf("inbound %q does not implement ShadowTLSUserManager", frontTag)
+	}
+	users := make([]option.ShadowTLSUser, len(*subscriptions))
+	for i, u := range *subscriptions {
+		users[i] = option.ShadowTLSUser{Name: BuildUserTag(tag, &u), Password: u.UUID}
+	}
+	return mgr.AddUsers(users)
 }
 
 // Add dispatches subscriptions to the correct sing-box user manager based on protocol.
@@ -129,16 +166,9 @@ func (m *Manager) Add(subscriptions *[]api.SubscriptionInfo, ib interface{ Tag()
 		if !ok {
 			return fmt.Errorf("inbound %q does not implement ShadowTLSUserManager", ibTag)
 		}
-		// UUID authenticates at the ShadowTLS layer, Passwd keys the inner
-		// shadowsocks layer. Passwd is used because the inner cipher needs a
-		// base64 key of at least 16 bytes, which a UUID is not.
-		users := make([]inboundprotocol.ShadowTLSUser, len(*subscriptions))
+		users := make([]option.ShadowTLSUser, len(*subscriptions))
 		for i, u := range *subscriptions {
-			users[i] = inboundprotocol.ShadowTLSUser{
-				Name:          BuildUserTag(tag, &u),
-				Password:      u.UUID,
-				InnerPassword: u.Passwd,
-			}
+			users[i] = option.ShadowTLSUser{Name: BuildUserTag(tag, &u), Password: u.UUID}
 		}
 		return mgr.AddUsers(users)
 
@@ -169,8 +199,21 @@ func (m *Manager) RemoveSubscriptions(emails []string, tag, protocol string) err
 		return errors.New("inbound not found: " + tag)
 	}
 
-	if err := m.Remove(ib, strings.ToLower(protocol), emails); err != nil {
+	if err := m.Remove(ib, InnerProtocol(protocol), emails); err != nil {
 		return err
+	}
+
+	// Detected by presence rather than passed in, since callers only have the
+	// node's protocol. Leaving a revoked user on the wrapper would still let
+	// them complete the ShadowTLS handshake.
+	if front, found := m.coreInstance.GetInbound(api.ShadowTLSTag(tag)); found {
+		mgr, ok := front.(ShadowTLSUserManager)
+		if !ok {
+			return fmt.Errorf("inbound %q does not implement ShadowTLSUserManager", front.Tag())
+		}
+		if err := mgr.DelUsers(emails); err != nil {
+			return err
+		}
 	}
 
 	for _, u := range emails {
@@ -372,4 +415,3 @@ func (m *Manager) ResetTraffic(pending *limiter.PendingTraffic) {
 func BuildUserTag(tag string, sub *api.SubscriptionInfo) string {
 	return fmt.Sprintf("%s_%s", tag, sub.Email)
 }
-

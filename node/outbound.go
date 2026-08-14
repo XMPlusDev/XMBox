@@ -171,8 +171,17 @@ func buildRelayTransport(relayNodeInfo *api.RelayNodeInfo) (*option.V2RayTranspo
 	t := &option.V2RayTransportOptions{Type: ns.Type}
 	switch ns.Type {
 	case "tcp", "":
-	    t.Type = "http"
-		return nil, nil
+		// Mirrors buildTransport on the inbound side: only the http header type
+		// is a real transport, and a relay must speak whatever the node it
+		// dials is listening for.
+		if ns.HeaderType != "http" {
+			return nil, nil
+		}
+		t.Type = "http"
+		t.HTTPOptions.Method = ns.Method
+		t.HTTPOptions.Path = ns.Path
+		t.HTTPOptions.Host = badoption.Listable[string]([]string{ns.Host})
+		return t, nil
 	case "ws":
 		t.WebsocketOptions = option.V2RayWebsocketOptions{
 			Path:         ns.Path,

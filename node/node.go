@@ -10,9 +10,9 @@ import (
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/option"
 	R "github.com/sagernet/sing-box/route/rule"
+	"github.com/sagernet/sing-shadowsocks/shadowaead_2022"
 	C "github.com/sagernet/sing/common"
 	F "github.com/sagernet/sing/common/format"
-	"github.com/sagernet/sing-shadowsocks/shadowaead_2022"
 
 	"github.com/xmplusdev/xmbox/api"
 	"github.com/xmplusdev/xmbox/instance"
@@ -32,31 +32,51 @@ func NewManager(coreInstance *instance.Instance) *Manager {
 	return &Manager{coreInstance: coreInstance, relayRules: make(map[string]adapter.Rule)}
 }
 
-// AddNode builds an inbound from nodeInfo and registers it with sing-box.
+// AddNode builds a node's inbounds from nodeInfo and registers them with
+// sing-box. A node is usually one inbound, but a ShadowTLS-fronted node is a
+// chain: the protocol on loopback plus the ShadowTLS listener that detours
+// into it.
 func (m *Manager) AddNode(nodeInfo *api.NodeInfo, tag string, config *Config) error {
-	inbound, err := getInboundOptions(tag, nodeInfo, config)
+	inbounds, err := getInboundOptions(tag, nodeInfo, config)
 	if err != nil {
 		return fmt.Errorf("build inbound config: %w", err)
 	}
 
 	b := m.coreInstance.GetBox()
-	if err := b.Inbound().Create(
-		m.coreInstance.GetCtx(),
-		b.Router(),
-		m.coreInstance.GetLogFactory().NewLogger(
-			F.ToString("inbound/", inbound.Type, "[", tag, "]"),
-		),
-		tag,
-		inbound.Type,
-		inbound.Options,
-	); err != nil {
-		return fmt.Errorf("create inbound %q: %w", tag, err)
+	for _, inbound := range inbounds {
+		if err := b.Inbound().Create(
+			m.coreInstance.GetCtx(),
+			b.Router(),
+			m.coreInstance.GetLogFactory().NewLogger(
+				F.ToString("inbound/", inbound.Type, "[", inbound.Tag, "]"),
+			),
+			inbound.Tag,
+			inbound.Type,
+			inbound.Options,
+		); err != nil {
+			// Roll back whatever is already up, so a half-built node never
+			// lingers — a ShadowTLS listener without its protocol behind it
+			// would accept connections and drop every one.
+			for _, created := range inbounds {
+				_ = m.removeInbound(created.Tag)
+			}
+			return fmt.Errorf("create inbound %q: %w", inbound.Tag, err)
+		}
 	}
 	return nil
 }
 
-// RemoveNode removes the inbound with the given tag from sing-box.
+// RemoveNode removes every inbound belonging to the node with the given tag.
 func (m *Manager) RemoveNode(tag string) error {
+	// Front first: stop accepting before the protocol behind it disappears.
+	if err := m.removeInbound(api.ShadowTLSTag(tag)); err != nil {
+		return err
+	}
+	return m.removeInbound(tag)
+}
+
+// removeInbound removes one inbound by tag, if present.
+func (m *Manager) removeInbound(tag string) error {
 	b := m.coreInstance.GetBox()
 	if _, found := b.Inbound().Get(tag); found {
 		if err := b.Inbound().Remove(tag); err != nil {
@@ -97,7 +117,7 @@ func (m *Manager) removeOutbound(tag string) error {
 
 // AddRelayTag builds and registers a per-subscription relay outbound plus a
 // matching routing rule for each subscription, sending that user's traffic
-// arriving on mainTag's inbound to relayNodeInfo. 
+// arriving on mainTag's inbound to relayNodeInfo.
 func (m *Manager) AddRelayTag(relayNodeInfo *api.RelayNodeInfo, relayTag string, mainTag string, subscriptionInfo *[]api.SubscriptionInfo) error {
 	for _, subscription := range *subscriptionInfo {
 		passwd := subscription.Passwd

@@ -122,10 +122,12 @@ Fallback redirect unrecognised or non-matching connections to another local serv
   //anytls
   "padding_scheme": [],
   //shadowtls
-  "strict_mode": false,
-  "wildcard_sni": "all",
-  "handshake_server": "www.microsoft.com",
-  "handshake_server_port": 443
+  "shadowtls": { 
+    "handshake_server": "www.microsoft.com", 
+	"handshake_server_port": 443, 
+	"strict_mode": false, 
+	"wildcard_sni": "off" 
+  }
 }
 ```
 
@@ -169,12 +171,15 @@ Fallback redirect unrecognised or non-matching connections to another local serv
   //anytls
   "padding_scheme": [],
   //shadowtls
-  "strict_mode": false,
-  "wildcard_sni": "all",
-  "handshake_server": "www.microsoft.com",
-  "handshake_server_port": 443
+  "shadowtls": { 
+    "handshake_server": "www.microsoft.com", 
+	"handshake_server_port": 443, 
+	"strict_mode": false, 
+	"wildcard_sni": "off" 
+  }
 }
 ```
+
 #### TCP + HTTP
 ```
 {
@@ -216,12 +221,15 @@ Fallback redirect unrecognised or non-matching connections to another local serv
   //anytls
   "padding_scheme": [],
   //shadowtls
-  "strict_mode": false,
-  "wildcard_sni": "all",
-  "handshake_server": "www.microsoft.com",
-  "handshake_server_port": 443
+  "shadowtls": { 
+    "handshake_server": "www.microsoft.com", 
+	"handshake_server_port": 443, 
+	"strict_mode": false, 
+	"wildcard_sni": "off" 
+  }
 }
 ```
+
 ####  WS
 ```
 {
@@ -258,11 +266,6 @@ Fallback redirect unrecognised or non-matching connections to another local serv
   "quic_congestion_control": "bbr",
   //anytls
   "padding_scheme": [],
-  //shadowtls
-  "strict_mode": false,
-  "wildcard_sni": "all",
-  "handshake_server": "www.microsoft.com",
-  "handshake_server_port": 443
 }
 ```
 
@@ -301,11 +304,6 @@ Fallback redirect unrecognised or non-matching connections to another local serv
   "quic_congestion_control": "bbr",
   //anytls
   "padding_scheme": [],
-  //shadowtls
-  "strict_mode": false,
-  "wildcard_sni": "all",
-  "handshake_server": "www.microsoft.com",
-  "handshake_server_port": 443
 }
 ```
 
@@ -345,11 +343,6 @@ Fallback redirect unrecognised or non-matching connections to another local serv
   "quic_congestion_control": "bbr",
   //anytls
   "padding_scheme": [],
-  //shadowtls
-  "strict_mode": false,
-  "wildcard_sni": "all",
-  "handshake_server": "www.microsoft.com",
-  "handshake_server_port": 443
 }
 ```
 

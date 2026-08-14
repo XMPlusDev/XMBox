@@ -3,8 +3,6 @@ package subscription
 import (
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common/auth"
-
-	inboundprotocol "github.com/xmplusdev/xmbox/inbound/protocol"
 )
 
 type VLESSUserManager interface {
@@ -42,12 +40,11 @@ type ShadowsocksUserManager interface {
 	DelUsers(emails []string) error
 }
 
-// ShadowTLSUserManager takes inboundprotocol.ShadowTLSUser rather than
-// option.ShadowTLSUser because a ShadowTLS node stacks two protocols: each
-// subscription needs a ShadowTLS credential and a key for the inner
-// shadowsocks layer that carries destinations and encrypts traffic.
+// ShadowTLSUserManager belongs to the ShadowTLS listener fronting a node, not
+// to the node's own protocol. A fronted node authenticates twice: once here and
+// once at the protocol behind the detour.
 type ShadowTLSUserManager interface {
-	AddUsers(users []inboundprotocol.ShadowTLSUser) error
+	AddUsers(users []option.ShadowTLSUser) error
 	DelUsers(emails []string) error
 }
 

@@ -2,6 +2,7 @@ package node
 
 import (
 	"fmt"
+	"log"
 	"net/netip"
 	"strings"
 
@@ -12,11 +13,23 @@ import (
 	"github.com/xmplusdev/xmbox/cert"
 )
 
-// getInboundOptions builds the sing-box Inbound option struct for nodeInfo.
-func getInboundOptions(tag string, nodeInfo *api.NodeInfo, config *Config) (option.Inbound, error) {
+// ShadowTLSTag returns the tag of the ShadowTLS listener fronting a node.
+//
+// The node tag stays on the protocol inbound behind it, so traffic accounting,
+// limiters and connection tracking — all keyed on metadata.Inbound, which the
+// router rewrites to the detour target — keep working unchanged.
+
+// getInboundOptions builds the sing-box inbound chain for nodeInfo.
+//
+// A node is normally a single inbound. When ShadowTLS is enabled it becomes
+// two: the node's real protocol bound to loopback keeping the node tag, fronted
+// by a ShadowTLS listener on the public port that detours into it. ShadowTLS
+// carries no destination and no encryption of its own, so the protocol behind
+// it is what actually moves traffic.
+func getInboundOptions(tag string, nodeInfo *api.NodeInfo, config *Config) ([]option.Inbound, error) {
 	addr, err := netip.ParseAddr(nodeInfo.ListenAddr)
 	if err != nil {
-		return option.Inbound{}, fmt.Errorf("invalid listen IP %q: %w", nodeInfo.ListenAddr, err)
+		return nil, fmt.Errorf("invalid listen IP %q: %w", nodeInfo.ListenAddr, err)
 	}
 
 	listen := option.ListenOptions{
@@ -25,6 +38,33 @@ func getInboundOptions(tag string, nodeInfo *api.NodeInfo, config *Config) (opti
 	}
 	if nodeInfo.TCPFastOpen {
 		listen.TCPFastOpen = true
+	}
+
+	protocol := strings.ToLower(nodeInfo.Protocol)
+	shadowTLS := nodeInfo.NetworkSettings.ShadowTLS
+
+	// A node whose protocol is itself "shadowtls" predates the wrapper being an
+	// option on any protocol. It always meant shadowsocks behind ShadowTLS, so
+	// it is expressed that way now.
+	if protocol == "shadowtls" {
+		if shadowTLS == nil {
+			return nil, fmt.Errorf("shadowtls node %q has no handshake settings", tag)
+		}
+		protocol = "shadowsocks"
+	}
+
+	publicListen := listen
+	if shadowTLS != nil {
+		if err := checkShadowTLSInner(protocol, strings.ToLower(nodeInfo.NetworkSettings.Type)); err != nil {
+			return nil, err
+		}
+		// The protocol moves to loopback on an ephemeral port; it is reached by
+		// injection through the detour, never over its own listener.
+		loopback := netip.MustParseAddr("127.0.0.1")
+		listen = option.ListenOptions{Listen: (*badoption.Addr)(&loopback), ListenPort: 0}
+		// ShadowTLS already performs the TLS handshake. Leaving the protocol's
+		// own TLS on would nest a second, real TLS session inside the tunnel.
+		nodeInfo.TlsSettings = nil
 	}
 
 	// Multiplex
@@ -46,7 +86,7 @@ func getInboundOptions(tag string, nodeInfo *api.NodeInfo, config *Config) (opti
 			if config.CertConfig != nil && nodeInfo.TlsSettings.CertMode != "none" {
 				certFile, keyFile, err := getCertFile(config.CertConfig, nodeInfo.TlsSettings)
 				if err != nil {
-					return option.Inbound{}, err
+					return nil, err
 				}
 				tls.CertificatePath = certFile
 				tls.KeyPath = keyFile
@@ -79,13 +119,12 @@ func getInboundOptions(tag string, nodeInfo *api.NodeInfo, config *Config) (opti
 	}
 
 	in := option.Inbound{Tag: tag}
-	protocol := strings.ToLower(nodeInfo.Protocol)
 
 	switch protocol {
 	case "vmess", "vless":
-		transport, err := buildTransport(nodeInfo)
+		transport, err := buildTransport(nodeInfo, shadowTLS != nil)
 		if err != nil {
-			return option.Inbound{}, err
+			return nil, err
 		}
 		tlsContainer := option.InboundTLSOptionsContainer{TLS: &tls}
 		if protocol == "vless" {
@@ -107,9 +146,9 @@ func getInboundOptions(tag string, nodeInfo *api.NodeInfo, config *Config) (opti
 		}
 
 	case "trojan":
-		transport, err := buildTransport(nodeInfo)
+		transport, err := buildTransport(nodeInfo, shadowTLS != nil)
 		if err != nil {
-			return option.Inbound{}, err
+			return nil, err
 		}
 		trojanOpt := &option.TrojanInboundOptions{
 			ListenOptions:              listen,
@@ -183,33 +222,10 @@ func getInboundOptions(tag string, nodeInfo *api.NodeInfo, config *Config) (opti
 		in.Type = "shadowsocks"
 		in.Options = &option.ShadowsocksInboundOptions{
 			ListenOptions: listen,
-			Method:        nodeInfo.NetworkSettings.Cipher,
+			Method:        shadowsocksCipher(nodeInfo.NetworkSettings.Cipher),
 			Password:      nodeInfo.ServerKey,
 			Multiplex:     multiplex,
 			Managed:       true,
-		}
-
-	case "shadowtls":
-		wildcardSNI, err := parseWildcardSNI(nodeInfo.NetworkSettings.WildcardSNI)
-		if err != nil {
-			return option.Inbound{}, err
-		}
-		in.Type = "shadowtls"
-		in.Options = &option.ShadowTLSInboundOptions{
-			ListenOptions: listen,
-			Version:       3,
-			// ShadowTLS v3 authenticates each user by their own password, so
-			// this field is free to carry the PSK of the inner shadowsocks
-			// layer that actually encrypts traffic and carries destinations.
-			Password:    nodeInfo.ServerKey,
-			StrictMode:  nodeInfo.NetworkSettings.StrictMode,
-			WildcardSNI: wildcardSNI,
-			Handshake: option.ShadowTLSHandshakeOptions{
-				ServerOptions: option.ServerOptions{
-					Server:     nodeInfo.NetworkSettings.HandshakeServer,
-					ServerPort: nodeInfo.NetworkSettings.HandshakePort,
-				},
-			},
 		}
 
 	case "anytls":
@@ -224,10 +240,109 @@ func getInboundOptions(tag string, nodeInfo *api.NodeInfo, config *Config) (opti
 		in.Options = opts
 
 	default:
-		return option.Inbound{}, fmt.Errorf("unsupported protocol: %s", protocol)
+		return nil, fmt.Errorf("unsupported protocol: %s", protocol)
 	}
 
-	return in, nil
+	if shadowTLS == nil {
+		return []option.Inbound{in}, nil
+	}
+	front, err := shadowTLSInbound(tag, publicListen, shadowTLS)
+	if err != nil {
+		return nil, err
+	}
+	// Protocol first: the router resolves the detour per connection, but
+	// creating the target first means it is never briefly missing.
+	return []option.Inbound{in, front}, nil
+}
+
+// shadowTLSInbound builds the ShadowTLS listener fronting a node, detouring
+// into the protocol inbound that holds the node tag.
+func shadowTLSInbound(tag string, listen option.ListenOptions, settings *api.ShadowTLSSettings) (option.Inbound, error) {
+	wildcardSNI, err := parseWildcardSNI(settings.WildcardSNI)
+	if err != nil {
+		return option.Inbound{}, err
+	}
+	version := settings.Version
+	if version == 0 {
+		version = 3
+	}
+	if version != 3 {
+		return option.Inbound{}, fmt.Errorf("shadowtls version %d is not supported: only version 3 authenticates users individually", version)
+	}
+	if settings.HandshakeServer == "" && wildcardSNI == option.ShadowTLSWildcardSNIOff {
+		return option.Inbound{}, fmt.Errorf("shadowtls needs a handshake_server unless wildcard_sni is enabled")
+	}
+	port := settings.HandshakePort
+	if port == 0 {
+		port = 443
+	}
+	listen.Detour = tag
+	return option.Inbound{
+		Tag:  api.ShadowTLSTag(tag),
+		Type: "shadowtls",
+		Options: &option.ShadowTLSInboundOptions{
+			ListenOptions: listen,
+			Version:       version,
+			StrictMode:    settings.StrictMode,
+			WildcardSNI:   wildcardSNI,
+			Handshake: option.ShadowTLSHandshakeOptions{
+				ServerOptions: option.ServerOptions{
+					Server:     settings.HandshakeServer,
+					ServerPort: port,
+				},
+			},
+		},
+	}, nil
+}
+
+// defaultShadowsocksCipher is used when the panel sends no cipher.
+//
+// It mirrors the panel's own fallback so the two ends cannot disagree:
+// Server::cipher() defaults to this, and the server_key it derives alongside is
+// 16 bytes, which is this cipher's key length. Nodes fronted by ShadowTLS
+// depend on it most — before ShadowTLS became a wrapper its inner cipher was
+// hardcoded, so those nodes never needed one configured.
+const defaultShadowsocksCipher = "2022-blake3-aes-128-gcm"
+
+// shadowsocksCipher returns the configured cipher, or the shared default.
+func shadowsocksCipher(cipher string) string {
+	if cipher = strings.TrimSpace(cipher); cipher != "" {
+		return cipher
+	}
+	return defaultShadowsocksCipher
+}
+
+// checkShadowTLSInner reports whether protocol over transport can sit behind
+// ShadowTLS.
+//
+// Three things rule combinations out. ShadowTLS is TCP-only, so QUIC-based
+// protocols cannot be wrapped at all. A detoured connection is injected
+// straight into the protocol's service and never passes through its V2Ray
+// transport — VMessInbound.NewConnection reaches h.service directly and never
+// touches h.transport — so ws, grpc and httpupgrade would be spoken by the
+// client and never read by the server. And protocols that rely on TLS for
+// their encryption travel in cleartext behind ShadowTLS, which provides none;
+// those are warned about rather than refused.
+func checkShadowTLSInner(protocol, transport string) error {
+	switch protocol {
+	case "shadowsocks":
+		return nil
+	case "anytls":
+		log.Printf("warning: anytls relies on TLS for encryption and ShadowTLS provides none; traffic behind it travels in cleartext")
+		return nil
+	case "vmess", "vless", "trojan":
+		if transport != "" && transport != "tcp" {
+			return fmt.Errorf("%s over %s cannot run behind shadowtls: a detoured connection is injected past the transport, so the %s layer would never be read", protocol, transport, transport)
+		}
+		if protocol != "vmess" {
+			log.Printf("warning: %s relies on TLS for encryption and ShadowTLS provides none; traffic behind it travels in cleartext", protocol)
+		}
+		return nil
+	case "hysteria", "hysteria2", "tuic", "naive":
+		return fmt.Errorf("%s cannot run behind shadowtls: it needs UDP and shadowtls is TCP-only", protocol)
+	default:
+		return fmt.Errorf("%s cannot run behind shadowtls", protocol)
+	}
 }
 
 // applyTrojanFallback sets the default Fallback on a TrojanInboundOptions
@@ -242,17 +357,32 @@ func applyTrojanFallback(opts *option.TrojanInboundOptions, fallback *api.Fallba
 	}
 }
 
-func buildTransport(nodeInfo *api.NodeInfo) (*option.V2RayTransportOptions, error) {
+// buildTransport builds the V2Ray transport for a node.
+//
+// fronted reports whether ShadowTLS sits in front. A fronted node must carry no
+// transport at all: its connections arrive by injection through the detour,
+// which bypasses the transport layer entirely. checkShadowTLSInner has already
+// refused the transports that genuinely need one.
+func buildTransport(nodeInfo *api.NodeInfo, fronted bool) (*option.V2RayTransportOptions, error) {
+	if fronted {
+		return nil, nil
+	}
 	t := &option.V2RayTransportOptions{Type: nodeInfo.NetworkSettings.Type}
 
 	switch nodeInfo.NetworkSettings.Type {
 	case "tcp", "":
-	    t.Type = "http"
-		if nodeInfo.NetworkSettings.HeaderType == "http" {
-			t.HTTPOptions.Method = nodeInfo.NetworkSettings.Method
-			t.HTTPOptions.Path = nodeInfo.NetworkSettings.Path
-			t.HTTPOptions.Host = badoption.Listable[string]([]string{nodeInfo.NetworkSettings.Host})
+		// Only the http header type is a real transport — xray's
+		// "tcp + header.type: http" obfuscation, which sing-box models as the
+		// v2ray http transport. A plain TCP node carries none; building one
+		// unconditionally left the server waiting for an HTTP layer no client
+		// sends.
+		if nodeInfo.NetworkSettings.HeaderType != "http" {
+			return nil, nil
 		}
+		t.Type = "http"
+		t.HTTPOptions.Method = nodeInfo.NetworkSettings.Method
+		t.HTTPOptions.Path = nodeInfo.NetworkSettings.Path
+		t.HTTPOptions.Host = badoption.Listable[string]([]string{nodeInfo.NetworkSettings.Host})
 		return t, nil
 	case "ws":
 		t.WebsocketOptions = option.V2RayWebsocketOptions{
@@ -290,7 +420,7 @@ func getCertFile(certConfig *cert.CertConfig, tlsSettings *api.TlsSettings) (cer
 		}
 		return cf, kf, nil
 	case "dns":
-		pn :=  certConfig.Provider
+		pn := certConfig.Provider
 		if tlsSettings != nil {
 			pn = tlsSettings.DnsProvider
 		}
