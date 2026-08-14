@@ -94,9 +94,10 @@ func newNaiveInbound(
 			return nil, E.New("TLS is required for QUIC server")
 		}
 	}
-	if len(options.Users) == 0 {
-		return nil, E.New("missing users")
-	}
+	// Users are not required at creation: nodes are created before their
+	// subscriptions are fetched and receive users later via AddUsers. Until
+	// then authSnap holds a nil authenticator and ServeHTTP rejects every
+	// request.
 	if options.TLS != nil {
 		tlsConfig, err := tls.NewServer(ctx, logger, common.PtrValueOrDefault(options.TLS))
 		if err != nil {
@@ -221,7 +222,10 @@ func (h *NaiveInbound) ServeHTTP(writer http.ResponseWriter, request *http.Reque
 	}
 	userName, password, authOk := sHttp.ParseBasicAuth(request.Header.Get("Proxy-Authorization"))
 	if authOk {
-		authOk = h.authSnap.Load().Verify(userName, password)
+		// auth.NewAuthenticator returns nil for an empty user list, and Verify
+		// panics on a nil receiver.
+		authenticator := h.authSnap.Load()
+		authOk = authenticator != nil && authenticator.Verify(userName, password)
 	}
 	if !authOk {
 		naiveRejectHTTP(writer, http.StatusProxyAuthRequired)

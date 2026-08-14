@@ -183,7 +183,17 @@ func (h *ShadowTLSInbound) DelUsers(names []string) error {
 
 // rebuildService recreates shadowtls.Service with the current user list and
 // atomically stores it. Caller must hold h.mu.
+//
+// v3 requires at least one user: shadowtls.NewService rejects an empty list.
+// Nodes are created before their subscriptions are fetched, so the user list is
+// empty at that point and again if every user is later removed. Store a nil
+// service for that window instead of failing — NewConnection rejects incoming
+// connections until AddUsers supplies a user and the service is built.
 func (h *ShadowTLSInbound) rebuildService() error {
+	if h.baseVersion == 3 && len(h.users) == 0 {
+		h.service.Store(nil)
+		return nil
+	}
 	svc, err := shadowtls.NewService(shadowtls.ServiceConfig{
 		Version:                h.baseVersion,
 		Password:               h.basePassword,
@@ -206,6 +216,11 @@ func (h *ShadowTLSInbound) rebuildService() error {
 
 func (h *ShadowTLSInbound) NewConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
 	svc := h.service.Load()
+	if svc == nil {
+		h.logger.DebugContext(ctx, "connection rejected: no users")
+		N.CloseOnHandshakeFailure(conn, onClose, E.New("no users"))
+		return
+	}
 	err := svc.NewConnection(adapter.WithContext(log.ContextWithNewID(ctx), &metadata), conn, metadata.Source, metadata.Destination, onClose)
 	N.CloseOnHandshakeFailure(conn, onClose, err)
 	if err != nil {
