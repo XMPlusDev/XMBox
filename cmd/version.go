@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var version = `XMBox v2608140`
+var version = `XMBox v2608141`
 
 func init() {
 	rootCmd.AddCommand(&cobra.Command{

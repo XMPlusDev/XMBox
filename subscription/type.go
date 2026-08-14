@@ -3,6 +3,8 @@ package subscription
 import (
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common/auth"
+
+	inboundprotocol "github.com/xmplusdev/xmbox/inbound/protocol"
 )
 
 type VLESSUserManager interface {
@@ -40,8 +42,12 @@ type ShadowsocksUserManager interface {
 	DelUsers(emails []string) error
 }
 
+// ShadowTLSUserManager takes inboundprotocol.ShadowTLSUser rather than
+// option.ShadowTLSUser because a ShadowTLS node stacks two protocols: each
+// subscription needs a ShadowTLS credential and a key for the inner
+// shadowsocks layer that carries destinations and encrypts traffic.
 type ShadowTLSUserManager interface {
-	AddUsers(users []option.ShadowTLSUser) error
+	AddUsers(users []inboundprotocol.ShadowTLSUser) error
 	DelUsers(emails []string) error
 }
 

@@ -11,6 +11,7 @@ import (
 
 	"github.com/xmplusdev/xmbox/api"
 	"github.com/xmplusdev/xmbox/counter"
+	inboundprotocol "github.com/xmplusdev/xmbox/inbound/protocol"
 	"github.com/xmplusdev/xmbox/instance"
 	"github.com/xmplusdev/xmbox/limiter"
 )
@@ -128,9 +129,16 @@ func (m *Manager) Add(subscriptions *[]api.SubscriptionInfo, ib interface{ Tag()
 		if !ok {
 			return fmt.Errorf("inbound %q does not implement ShadowTLSUserManager", ibTag)
 		}
-		users := make([]option.ShadowTLSUser, len(*subscriptions))
+		// UUID authenticates at the ShadowTLS layer, Passwd keys the inner
+		// shadowsocks layer. Passwd is used because the inner cipher needs a
+		// base64 key of at least 16 bytes, which a UUID is not.
+		users := make([]inboundprotocol.ShadowTLSUser, len(*subscriptions))
 		for i, u := range *subscriptions {
-			users[i] = option.ShadowTLSUser{Name: BuildUserTag(tag, &u), Password: u.UUID}
+			users[i] = inboundprotocol.ShadowTLSUser{
+				Name:          BuildUserTag(tag, &u),
+				Password:      u.UUID,
+				InnerPassword: u.Passwd,
+			}
 		}
 		return mgr.AddUsers(users)
 

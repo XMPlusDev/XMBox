@@ -194,7 +194,11 @@ func getInboundOptions(tag string, nodeInfo *api.NodeInfo, config *Config) (opti
 		in.Options = &option.ShadowTLSInboundOptions{
 			ListenOptions: listen,
 			Version:       3,
-			StrictMode:    nodeInfo.NetworkSettings.StrictMode,
+			// ShadowTLS v3 authenticates each user by their own password, so
+			// this field is free to carry the PSK of the inner shadowsocks
+			// layer that actually encrypts traffic and carries destinations.
+			Password:   nodeInfo.ServerKey,
+			StrictMode: nodeInfo.NetworkSettings.StrictMode,
 			Handshake: option.ShadowTLSHandshakeOptions{
 				ServerOptions: option.ServerOptions{
 					Server:     nodeInfo.NetworkSettings.HandshakeServer,
