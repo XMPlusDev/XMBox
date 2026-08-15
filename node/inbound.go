@@ -324,19 +324,18 @@ func shadowsocksCipher(cipher string) string {
 // their encryption travel in cleartext behind ShadowTLS, which provides none;
 // those are warned about rather than refused.
 func checkShadowTLSInner(protocol, transport string) error {
+	// A fronted node's connections arrive by injection through the detour,
+	// which bypasses the V2Ray transport entirely — VMessInbound.NewConnection
+	// reaches h.service directly and never touches h.transport — so ws, grpc
+	// and httpupgrade would be spoken by the client and never read here.
+	if transport != "" && transport != "tcp" {
+		return fmt.Errorf("shadowtls needs the tcp transport, got %s: a detoured connection is injected past the transport, so the %s layer would never be read", transport, transport)
+	}
 	switch protocol {
-	case "shadowsocks":
+	case "shadowsocks", "vmess":
 		return nil
-	case "anytls":
-		log.Printf("warning: anytls relies on TLS for encryption and ShadowTLS provides none; traffic behind it travels in cleartext")
-		return nil
-	case "vmess", "vless", "trojan":
-		if transport != "" && transport != "tcp" {
-			return fmt.Errorf("%s over %s cannot run behind shadowtls: a detoured connection is injected past the transport, so the %s layer would never be read", protocol, transport, transport)
-		}
-		if protocol != "vmess" {
-			log.Printf("warning: %s relies on TLS for encryption and ShadowTLS provides none; traffic behind it travels in cleartext", protocol)
-		}
+	case "vless", "trojan", "anytls":
+		log.Printf("warning: %s relies on TLS for encryption and ShadowTLS provides none; traffic behind it travels in cleartext", protocol)
 		return nil
 	case "hysteria", "hysteria2", "tuic", "naive":
 		return fmt.Errorf("%s cannot run behind shadowtls: it needs UDP and shadowtls is TCP-only", protocol)

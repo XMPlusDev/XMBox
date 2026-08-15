@@ -92,7 +92,15 @@ Fallback redirect unrecognised or non-matching connections to another local serv
       "header": {
         "type": "none"
       }
-    }
+    },
+	"plug-in":{
+	  "name": "shadowtls",
+	  "version": 3,
+	  "handshake_server": "www.microsoft.com", 
+	  "handshake_server_port": 443, 
+	  "strict_mode": false, 
+	  "wildcard_sni": "off" 
+	}
   },
   "fallback": {
     "server": "127.0.0.1",
@@ -120,14 +128,7 @@ Fallback redirect unrecognised or non-matching connections to another local serv
   "enable_quic" : false,
   "quic_congestion_control": "bbr",
   //anytls
-  "padding_scheme": [],
-  //shadowtls
-  "shadowtls": { 
-    "handshake_server": "www.microsoft.com", 
-	"handshake_server_port": 443, 
-	"strict_mode": false, 
-	"wildcard_sni": "off" 
-  }
+  "padding_scheme": []
 }
 ```
 
@@ -145,7 +146,15 @@ Fallback redirect unrecognised or non-matching connections to another local serv
       "header": {
         "type": "none"
       }
-    }
+    },
+	"plug-in":{
+	  "name": "shadowtls",
+	  "version": 3,
+	  "handshake_server": "www.microsoft.com", 
+	  "handshake_server_port": 443, 
+	  "strict_mode": false, 
+	  "wildcard_sni": "off" 
+	}
   },
   //vless
   "flow": "xtls-rprx-vision",
@@ -169,14 +178,7 @@ Fallback redirect unrecognised or non-matching connections to another local serv
   "enable_quic" : false,
   "quic_congestion_control": "bbr",
   //anytls
-  "padding_scheme": [],
-  //shadowtls
-  "shadowtls": { 
-    "handshake_server": "www.microsoft.com", 
-	"handshake_server_port": 443, 
-	"strict_mode": false, 
-	"wildcard_sni": "off" 
-  }
+  "padding_scheme": []
 }
 ```
 
@@ -219,14 +221,7 @@ Fallback redirect unrecognised or non-matching connections to another local serv
   "enable_quic" : false,
   "quic_congestion_control": "bbr",
   //anytls
-  "padding_scheme": [],
-  //shadowtls
-  "shadowtls": { 
-    "handshake_server": "www.microsoft.com", 
-	"handshake_server_port": 443, 
-	"strict_mode": false, 
-	"wildcard_sni": "off" 
-  }
+  "padding_scheme": []
 }
 ```
 
@@ -265,7 +260,7 @@ Fallback redirect unrecognised or non-matching connections to another local serv
   "enable_quic" : false,
   "quic_congestion_control": "bbr",
   //anytls
-  "padding_scheme": [],
+  "padding_scheme": []
 }
 ```
 
@@ -303,7 +298,7 @@ Fallback redirect unrecognised or non-matching connections to another local serv
   "enable_quic" : false,
   "quic_congestion_control": "bbr",
   //anytls
-  "padding_scheme": [],
+  "padding_scheme": []
 }
 ```
 
@@ -342,7 +337,7 @@ Fallback redirect unrecognised or non-matching connections to another local serv
   "enable_quic" : false,
   "quic_congestion_control": "bbr",
   //anytls
-  "padding_scheme": [],
+  "padding_scheme": []
 }
 ```
 

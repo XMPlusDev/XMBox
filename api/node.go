@@ -223,6 +223,20 @@ func (c *Client) parseNetworkSettings(networkData *simplejson.Json, nodeInfo *No
 		return fmt.Errorf("missing transportProtocol.settings")
 	}
 
+	// ShadowTLS is declared as a plug-in on the transport. Only tcp can carry
+	// it: a fronted node's connections arrive by injection through a detour,
+	// which bypasses the transport layer, so ws, grpc and httpupgrade would be
+	// spoken by the client and never read by the server.
+	if plugin, ok := transport.CheckGet("plug-in"); ok {
+		name, _ := plugin.CheckGet("name")
+		if name != nil && strings.EqualFold(name.MustString(), "shadowtls") {
+			if nodeInfo.NetworkSettings.Type != "tcp" {
+				return fmt.Errorf("shadowtls plug-in needs transportProtocol.type tcp, got %q", nodeInfo.NetworkSettings.Type)
+			}
+			nodeInfo.NetworkSettings.ShadowTLS = parseShadowTLSSettings(plugin)
+		}
+	}
+
 	switch nodeInfo.NetworkSettings.Type {
 	case "tcp":
 		if header, ok := settings.CheckGet("header"); ok {
@@ -312,13 +326,16 @@ func (c *Client) parseNetworkSettings(networkData *simplejson.Json, nodeInfo *No
 		nodeInfo.NetworkSettings.PaddingScheme = a
 	}
 
-	// ShadowTLS. A nested "shadowtls" object fronts whatever protocol the node
-	// runs; its presence is what enables the wrapper. The flat keys are the
-	// older shape, kept for nodes whose protocol is itself "shadowtls".
-	if v, ok := networkData.CheckGet("shadowtls"); ok {
-		nodeInfo.NetworkSettings.ShadowTLS = parseShadowTLSSettings(v)
-	} else if _, ok := networkData.CheckGet("handshake_server"); ok {
-		nodeInfo.NetworkSettings.ShadowTLS = parseShadowTLSSettings(networkData)
+	// Older shapes, before ShadowTLS moved into transportProtocol.plug-in: a
+	// top-level object, and flat keys on nodes whose protocol is itself
+	// "shadowtls". Kept so existing node records keep working until they are
+	// re-saved in the new shape.
+	if nodeInfo.NetworkSettings.ShadowTLS == nil {
+		if v, ok := networkData.CheckGet("shadowtls"); ok {
+			nodeInfo.NetworkSettings.ShadowTLS = parseShadowTLSSettings(v)
+		} else if _, ok := networkData.CheckGet("handshake_server"); ok {
+			nodeInfo.NetworkSettings.ShadowTLS = parseShadowTLSSettings(networkData)
+		}
 	}
 
 	return nil
