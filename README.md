@@ -356,6 +356,13 @@ Fallback redirect unrecognised or non-matching connections to another local serv
 
 ### Security Settings
 
+#### NONE
+```
+{
+  "none": []
+}
+```
+
 #### TLS / REALITY
 ```
 {
