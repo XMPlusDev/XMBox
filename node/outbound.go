@@ -15,9 +15,14 @@ func RelayOutboundTag(relayTag string, subscription *api.SubscriptionInfo) strin
 	return fmt.Sprintf("%s_%d", relayTag, subscription.Id)
 }
 
-// OutboundRelayBuilder builds a sing-box outbound that relays a single
-// subscription's traffic to a downstream node (relayNodeInfo). It mirrors
-func OutboundRelayBuilder(relayNodeInfo *api.RelayNodeInfo, tag string, subscription *api.SubscriptionInfo, passwd string) (*option.Outbound, error) {
+// OutboundRelayBuilder builds the outbound chain that relays a single
+// subscription's traffic to a downstream node (relayNodeInfo).
+//
+// Usually one outbound. When the downstream node is fronted by ShadowTLS it is
+// two, because a relay is simply a client of that node and has to dial it the
+// same way any client would: the protocol outbound keeps the relay tag the
+// routing rule points at, and reaches the node through a ShadowTLS outbound.
+func OutboundRelayBuilder(relayNodeInfo *api.RelayNodeInfo, tag string, subscription *api.SubscriptionInfo, passwd string) ([]*option.Outbound, error) {
 	if relayNodeInfo == nil {
 		return nil, fmt.Errorf("relayNodeInfo is nil")
 	}
@@ -30,7 +35,21 @@ func OutboundRelayBuilder(relayNodeInfo *api.RelayNodeInfo, tag string, subscrip
 		ServerPort: relayNodeInfo.Port,
 	}
 
-	transport, err := buildRelayTransport(relayNodeInfo)
+	nodeType := strings.ToLower(relayNodeInfo.NodeType)
+	var shadowTLS *api.ShadowTLSSettings
+	transportType := ""
+	if ns := relayNodeInfo.NetworkSettings; ns != nil {
+		shadowTLS = ns.ShadowTLS
+		transportType = strings.ToLower(ns.Type)
+	}
+
+	if shadowTLS != nil {
+		if err := checkShadowTLSInner(nodeType, transportType); err != nil {
+			return nil, err
+		}
+	}
+
+	transport, err := buildRelayTransport(relayNodeInfo, shadowTLS != nil)
 	if err != nil {
 		return nil, err
 	}
@@ -38,10 +57,16 @@ func OutboundRelayBuilder(relayNodeInfo *api.RelayNodeInfo, tag string, subscrip
 	if err != nil {
 		return nil, err
 	}
+	if shadowTLS != nil {
+		// ShadowTLS performs the TLS handshake for this connection; leaving the
+		// protocol's own TLS on would nest a second, real TLS session inside
+		// the tunnel, which is not what the node is listening for.
+		tlsContainer = option.OutboundTLSOptionsContainer{}
+	}
 
 	out := &option.Outbound{Tag: RelayOutboundTag(tag, subscription)}
 
-	switch strings.ToLower(relayNodeInfo.NodeType) {
+	switch nodeType {
 	case "vless":
 		out.Type = "vless"
 		out.Options = &option.VLESSOutboundOptions{
@@ -73,12 +98,18 @@ func OutboundRelayBuilder(relayNodeInfo *api.RelayNodeInfo, tag string, subscrip
 		}
 
 	case "shadowsocks":
-		out.Type = "shadowsocks"
-		out.Options = &option.ShadowsocksOutboundOptions{
+		ssOpts := &option.ShadowsocksOutboundOptions{
 			ServerOptions: server,
-			Method:        relayNodeInfo.Cipher,
+			Method:        shadowsocksCipher(relayNodeInfo.Cipher),
 			Password:      passwd,
 		}
+		if shadowTLS != nil {
+			// ShadowTLS is TCP-only, so UDP has to be tunnelled over it.
+			// The other protocols carry UDP inside their own stream already.
+			ssOpts.UDPOverTCP = &option.UDPOverTCPOptions{Enabled: true}
+		}
+		out.Type = "shadowsocks"
+		out.Options = ssOpts
 
 	case "hysteria2":
 		var obfs *option.Hysteria2Obfs
@@ -138,15 +169,6 @@ func OutboundRelayBuilder(relayNodeInfo *api.RelayNodeInfo, tag string, subscrip
 			OutboundTLSOptionsContainer: tlsContainer,
 		}
 
-	case "shadowtls":
-		out.Type = "shadowtls"
-		out.Options = &option.ShadowTLSOutboundOptions{
-			ServerOptions:               server,
-			Version:                     3,
-			Password:                    subscription.UUID,
-			OutboundTLSOptionsContainer: tlsContainer,
-		}
-
 	case "naive":
 		out.Type = "naive"
 		out.Options = &option.NaiveOutboundOptions{
@@ -159,12 +181,76 @@ func OutboundRelayBuilder(relayNodeInfo *api.RelayNodeInfo, tag string, subscrip
 		return nil, fmt.Errorf("unsupported relay node type: %s", relayNodeInfo.NodeType)
 	}
 
-	return out, nil
+	if shadowTLS == nil {
+		return []*option.Outbound{out}, nil
+	}
+
+	front, err := shadowTLSOutbound(out.Tag, server, subscription.UUID, shadowTLS)
+	if err != nil {
+		return nil, err
+	}
+	setRelayDetour(out, front.Tag)
+	return []*option.Outbound{out, front}, nil
 }
 
-func buildRelayTransport(relayNodeInfo *api.RelayNodeInfo) (*option.V2RayTransportOptions, error) {
+// shadowTLSOutbound builds the ShadowTLS outbound a relay dials through.
+func shadowTLSOutbound(relayTag string, server option.ServerOptions, password string, settings *api.ShadowTLSSettings) (*option.Outbound, error) {
+	version := settings.Version
+	if version == 0 {
+		version = 3
+	}
+	if version != 3 {
+		return nil, fmt.Errorf("shadowtls version %d is not supported: only version 3 authenticates users individually", version)
+	}
+	if settings.HandshakeServer == "" {
+		return nil, fmt.Errorf("shadowtls relay needs a handshake_server to present as its TLS server name")
+	}
+	return &option.Outbound{
+		Tag:  api.ShadowTLSTag(relayTag),
+		Type: "shadowtls",
+		Options: &option.ShadowTLSOutboundOptions{
+			ServerOptions: server,
+			Version:       version,
+			Password:      password,
+			// The handshake server, not the node's address: ShadowTLS relays
+			// this handshake to that site and hands back its genuine
+			// certificate, so it is that name the relay must verify against.
+			// TLS is mandatory here — the outbound refuses to build without it.
+			OutboundTLSOptionsContainer: option.OutboundTLSOptionsContainer{
+				TLS: &option.OutboundTLSOptions{
+					Enabled:    true,
+					ServerName: settings.HandshakeServer,
+				},
+			},
+		},
+	}, nil
+}
+
+// setRelayDetour points a protocol outbound at the ShadowTLS outbound in front
+// of it. Detour lives on the embedded DialerOptions, which each protocol's
+// options struct carries separately.
+func setRelayDetour(out *option.Outbound, detour string) {
+	switch opts := out.Options.(type) {
+	case *option.VLESSOutboundOptions:
+		opts.Detour = detour
+	case *option.VMessOutboundOptions:
+		opts.Detour = detour
+	case *option.TrojanOutboundOptions:
+		opts.Detour = detour
+	case *option.ShadowsocksOutboundOptions:
+		opts.Detour = detour
+	case *option.AnyTLSOutboundOptions:
+		opts.Detour = detour
+	}
+}
+
+// buildRelayTransport builds the V2Ray transport a relay speaks to the node it
+// dials. fronted reports whether that node is behind ShadowTLS, in which case
+// it carries no transport — the node's own inbound drops it too, because a
+// detoured connection is injected past the transport layer.
+func buildRelayTransport(relayNodeInfo *api.RelayNodeInfo, fronted bool) (*option.V2RayTransportOptions, error) {
 	ns := relayNodeInfo.NetworkSettings
-	if ns == nil {
+	if ns == nil || fronted {
 		return nil, nil
 	}
 

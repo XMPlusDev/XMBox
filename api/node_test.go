@@ -89,8 +89,10 @@ func TestParseUnknownPluginIgnored(t *testing.T) {
 	}
 }
 
-// Node records written before the move keep working.
-func TestParseLegacyShadowTLSShapes(t *testing.T) {
+// The plug-in is the only way ShadowTLS is enabled. The shapes that predated it
+// are inert, so a node record still carrying one is not silently fronted using
+// settings the panel no longer generates.
+func TestParseShadowTLSOnlyViaPlugin(t *testing.T) {
 	for name, raw := range map[string]string{
 		"top-level object": `{
 			"listen_port": 5069,
@@ -109,11 +111,8 @@ func TestParseLegacyShadowTLSShapes(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parseNetworkSettings: %v", err)
 			}
-			if node.NetworkSettings.ShadowTLS == nil {
-				t.Fatal("ShadowTLS is nil, want the legacy shape honoured")
-			}
-			if node.NetworkSettings.ShadowTLS.HandshakeServer != "www.microsoft.com" {
-				t.Errorf("handshake server = %q", node.NetworkSettings.ShadowTLS.HandshakeServer)
+			if node.NetworkSettings.ShadowTLS != nil {
+				t.Error("ShadowTLS was enabled without the transport plug-in")
 			}
 		})
 	}

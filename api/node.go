@@ -326,23 +326,13 @@ func (c *Client) parseNetworkSettings(networkData *simplejson.Json, nodeInfo *No
 		nodeInfo.NetworkSettings.PaddingScheme = a
 	}
 
-	// Older shapes, before ShadowTLS moved into transportProtocol.plug-in: a
-	// top-level object, and flat keys on nodes whose protocol is itself
-	// "shadowtls". Kept so existing node records keep working until they are
-	// re-saved in the new shape.
-	if nodeInfo.NetworkSettings.ShadowTLS == nil {
-		if v, ok := networkData.CheckGet("shadowtls"); ok {
-			nodeInfo.NetworkSettings.ShadowTLS = parseShadowTLSSettings(v)
-		} else if _, ok := networkData.CheckGet("handshake_server"); ok {
-			nodeInfo.NetworkSettings.ShadowTLS = parseShadowTLSSettings(networkData)
-		}
-	}
-
 	return nil
 }
 
-// parseShadowTLSSettings reads the ShadowTLS block, which appears either as a
-// nested object or as flat keys on networkSettings.
+// parseShadowTLSSettings reads the ShadowTLS plug-in block. That plug-in is the
+// only way ShadowTLS is enabled — there is no top-level switch and no protocol
+// named after it — so a node either declares it on its tcp transport or is not
+// fronted at all.
 func parseShadowTLSSettings(data *simplejson.Json) *ShadowTLSSettings {
 	settings := &ShadowTLSSettings{Version: 3}
 	if v, ok := data.CheckGet("version"); ok {

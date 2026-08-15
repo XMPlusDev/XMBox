@@ -43,16 +43,6 @@ func getInboundOptions(tag string, nodeInfo *api.NodeInfo, config *Config) ([]op
 	protocol := strings.ToLower(nodeInfo.Protocol)
 	shadowTLS := nodeInfo.NetworkSettings.ShadowTLS
 
-	// A node whose protocol is itself "shadowtls" predates the wrapper being an
-	// option on any protocol. It always meant shadowsocks behind ShadowTLS, so
-	// it is expressed that way now.
-	if protocol == "shadowtls" {
-		if shadowTLS == nil {
-			return nil, fmt.Errorf("shadowtls node %q has no handshake settings", tag)
-		}
-		protocol = "shadowsocks"
-	}
-
 	publicListen := listen
 	if shadowTLS != nil {
 		if err := checkShadowTLSInner(protocol, strings.ToLower(nodeInfo.NetworkSettings.Type)); err != nil {

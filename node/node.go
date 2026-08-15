@@ -125,12 +125,16 @@ func (m *Manager) AddRelayTag(relayNodeInfo *api.RelayNodeInfo, relayTag string,
 			passwd = fmt.Sprintf("%s:%s", relayNodeInfo.ServerKey, subscription.Passwd)
 		}
 
-		out, err := OutboundRelayBuilder(relayNodeInfo, relayTag, &subscription, passwd)
+		outbounds, err := OutboundRelayBuilder(relayNodeInfo, relayTag, &subscription, passwd)
 		if err != nil {
 			return fmt.Errorf("failed to build relay outbound for Id %d: %w", subscription.Id, err)
 		}
-		if err := m.addOutbound(out); err != nil {
-			return fmt.Errorf("failed to add relay outbound for Id %d: %w", subscription.Id, err)
+		// Reverse order: the ShadowTLS outbound a protocol detours through has
+		// to exist before the protocol that names it.
+		for i := len(outbounds) - 1; i >= 0; i-- {
+			if err := m.addOutbound(outbounds[i]); err != nil {
+				return fmt.Errorf("failed to add relay outbound for Id %d: %w", subscription.Id, err)
+			}
 		}
 
 		ruleOptions, err := RelayRuleOptions(mainTag, relayTag, &subscription)
@@ -148,8 +152,14 @@ func (m *Manager) AddRelayTag(relayNodeInfo *api.RelayNodeInfo, relayTag string,
 // created by AddRelayTag.
 func (m *Manager) RemoveRelayTag(relayTag string, subscriptionInfo *[]api.SubscriptionInfo) error {
 	for _, subscription := range *subscriptionInfo {
-		if err := m.removeOutbound(RelayOutboundTag(relayTag, &subscription)); err != nil {
+		outboundTag := RelayOutboundTag(relayTag, &subscription)
+		// Protocol first, then the ShadowTLS outbound it detours through, so
+		// nothing is left naming an outbound that has already gone.
+		if err := m.removeOutbound(outboundTag); err != nil {
 			return fmt.Errorf("failed to remove relay outbound for Id %d: %w", subscription.Id, err)
+		}
+		if err := m.removeOutbound(api.ShadowTLSTag(outboundTag)); err != nil {
+			return fmt.Errorf("failed to remove relay shadowtls outbound for Id %d: %w", subscription.Id, err)
 		}
 	}
 	return nil

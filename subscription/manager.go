@@ -38,7 +38,7 @@ func (m *Manager) AddSubscriptions(subscriptionInfo *[]api.SubscriptionInfo, nod
 		return errors.New("inbound not found: " + tag)
 	}
 
-	protocol := InnerProtocol(nodeInfo.Protocol)
+	protocol := strings.ToLower(nodeInfo.Protocol)
 	if err := m.Add(subscriptionInfo, ib, protocol, nodeInfo.NetworkSettings.Flow, nodeInfo.NetworkSettings.Cipher, tag); err != nil {
 		return err
 	}
@@ -48,16 +48,6 @@ func (m *Manager) AddSubscriptions(subscriptionInfo *[]api.SubscriptionInfo, nod
 		return m.addShadowTLSUsers(subscriptionInfo, tag)
 	}
 	return nil
-}
-
-// InnerProtocol maps a node's declared protocol onto the one that actually
-// carries traffic. A node typed "shadowtls" predates ShadowTLS becoming an
-// option on any protocol and always meant shadowsocks behind it.
-func InnerProtocol(protocol string) string {
-	if p := strings.ToLower(protocol); p != "shadowtls" {
-		return p
-	}
-	return "shadowsocks"
 }
 
 // addShadowTLSUsers registers subscriptions with the ShadowTLS listener
@@ -161,17 +151,6 @@ func (m *Manager) Add(subscriptions *[]api.SubscriptionInfo, ib interface{ Tag()
 		}
 		return mgr.AddUsers(users)
 
-	case "shadowtls":
-		mgr, ok := ib.(ShadowTLSUserManager)
-		if !ok {
-			return fmt.Errorf("inbound %q does not implement ShadowTLSUserManager", ibTag)
-		}
-		users := make([]option.ShadowTLSUser, len(*subscriptions))
-		for i, u := range *subscriptions {
-			users[i] = option.ShadowTLSUser{Name: BuildUserTag(tag, &u), Password: u.UUID}
-		}
-		return mgr.AddUsers(users)
-
 	case "anytls":
 		mgr, ok := ib.(AnyTLSUserManager)
 		if !ok {
@@ -199,7 +178,7 @@ func (m *Manager) RemoveSubscriptions(emails []string, tag, protocol string) err
 		return errors.New("inbound not found: " + tag)
 	}
 
-	if err := m.Remove(ib, InnerProtocol(protocol), emails); err != nil {
+	if err := m.Remove(ib, strings.ToLower(protocol), emails); err != nil {
 		return err
 	}
 
@@ -265,12 +244,6 @@ func (m *Manager) Remove(ib interface{ Tag() string }, protocol string, emails [
 		mgr, ok := ib.(ShadowsocksUserManager)
 		if !ok {
 			return fmt.Errorf("inbound %q does not implement ShadowsocksUserManager", ib.Tag())
-		}
-		return mgr.DelUsers(emails)
-	case "shadowtls":
-		mgr, ok := ib.(ShadowTLSUserManager)
-		if !ok {
-			return fmt.Errorf("inbound %q does not implement ShadowTLSUserManager", ib.Tag())
 		}
 		return mgr.DelUsers(emails)
 	case "anytls":
