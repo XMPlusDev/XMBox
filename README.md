@@ -166,7 +166,7 @@ Fallback redirect unrecognised or non-matching connections to another local serv
 }
 ```
 
-#### TCP + HTTP(OBFS HTTP)
+#### TCP (OBFS HTTP)
 ```
 {
   "listen_ip": "0.0.0.0",
@@ -183,29 +183,8 @@ Fallback redirect unrecognised or non-matching connections to another local serv
       }
     }
   },
-  //vless
-  "flow": "xtls-rprx-vision",
   // shadowsocks
-  "cipher": "aes-128-gcm",
-  // hysteria
-  //obfs_type(salamander or gecko)
-  "obfs_type": "salamander",
-  "obfs_password": "password",
-  "geckoMinPacketSize": 512,
-  "geckoMaxPacketSize": 1200,
-  "bbr_profile": "standard",
-  "ignore_client_bandwidth": true,
-  "realm_server_url": "",
-  "realm_token": "",
-  "realm_id": "",
-  "realm_stun_servers": [],
-  //tuic
-  "congestion_control": "bbr",
-  //naive
-  "enable_quic" : false,
-  "quic_congestion_control": "bbr",
-  //anytls
-  "padding_scheme": []
+  "cipher": "aes-128-gcm"
 }
 ```
 
@@ -251,29 +230,8 @@ Fallback redirect unrecognised or non-matching connections to another local serv
       "max_early_data": 0
     }
   },
-  //vless
-  "flow": "xtls-rprx-vision",
   // shadowsocks
-  "cipher": "aes-128-gcm",
-  // hysteria
-  //obfs_type(salamander or gecko)
-  "obfs_type": "salamander",
-  "obfs_password": "password",
-  "geckoMinPacketSize": 512,
-  "geckoMaxPacketSize": 1200,
-  "bbr_profile": "standard",
-  "ignore_client_bandwidth": true,
-  "realm_server_url": "",
-  "realm_token": "",
-  "realm_id": "",
-  "realm_stun_servers": [],
-  //tuic
-  "congestion_control": "bbr",
-  //naive
-  "enable_quic" : false,
-  "quic_congestion_control": "bbr",
-  //anytls
-  "padding_scheme": []
+  "cipher": "aes-128-gcm"
 }
 ```
 
@@ -289,29 +247,8 @@ Fallback redirect unrecognised or non-matching connections to another local serv
       "service_name": "tld"
     }
   },
-  //vless
-  "flow": "xtls-rprx-vision",
   // shadowsocks
-  "cipher": "aes-128-gcm",
-  // hysteria
-  //obfs_type(salamander or gecko)
-  "obfs_type": "salamander",
-  "obfs_password": "password",
-  "geckoMinPacketSize": 512,
-  "geckoMaxPacketSize": 1200,
-  "bbr_profile": "standard",
-  "ignore_client_bandwidth": true,
-  "realm_server_url": "",
-  "realm_token": "",
-  "realm_id": "",
-  "realm_stun_servers": [],
-  //tuic
-  "congestion_control": "bbr",
-  //naive
-  "enable_quic" : false,
-  "quic_congestion_control": "bbr",
-  //anytls
-  "padding_scheme": []
+  "cipher": "aes-128-gcm"
 }
 ```
 
@@ -328,29 +265,8 @@ Fallback redirect unrecognised or non-matching connections to another local serv
       "path": "/"
     }
   },
-  //vless
-  "flow": "xtls-rprx-vision",
   // shadowsocks
-  "cipher": "aes-128-gcm",
-  // hysteria
-  //obfs_type(salamander or gecko)
-  "obfs_type": "salamander",
-  "obfs_password": "password",
-  "geckoMinPacketSize": 512,
-  "geckoMaxPacketSize": 1200,
-  "bbr_profile": "standard",
-  "ignore_client_bandwidth": true,
-  "realm_server_url": "",
-  "realm_token": "",
-  "realm_id": "",
-  "realm_stun_servers": [],
-  //tuic
-  "congestion_control": "bbr",
-  //naive
-  "enable_quic" : false,
-  "quic_congestion_control": "bbr",
-  //anytls
-  "padding_scheme": []
+  "cipher": "aes-128-gcm"
 }
 ```
 
