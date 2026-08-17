@@ -1778,8 +1778,8 @@ github.com/sagernet/quic-go v0.61.0-sing-box-mod.4 h1:XoFf8KoBEsamWo3ePlcmS/xs8B
 github.com/sagernet/quic-go v0.61.0-sing-box-mod.4/go.mod h1:hmLC8GJPp+BrpBgrgJnacvI4fZGIhasuy1ROJJ8GR4E=
 github.com/sagernet/sing v0.9.0-beta.2 h1:JZ6bF5cEobx1FjptNvSLfKXP66nU1U21AuEDnebg8u8=
 github.com/sagernet/sing v0.9.0-beta.2/go.mod h1:K3Owt3xPhHugvlnlPPxZJ/exXdaJfEPOTNorGk4AXjo=
-github.com/sagernet/sing-box v1.13.19-0.20260813120727-db1053f8bc16 h1:Pts6pd8dfj2xdI6Cc4GSaINxe11M0O97cM/kp9/zMgg=
-github.com/sagernet/sing-box v1.13.19-0.20260813120727-db1053f8bc16/go.mod h1:5Q58OFUv4peYyHP580g4gYea9oQDXfIBnydQwZ+SZgI=
+github.com/sagernet/sing-box v1.14.0-beta.14 h1:ihQ4KTNIR771x/+R5QXQtX2DtljyCih6cjRLvf84H3I=
+github.com/sagernet/sing-box v1.14.0-beta.14/go.mod h1:5Q58OFUv4peYyHP580g4gYea9oQDXfIBnydQwZ+SZgI=
 github.com/sagernet/sing-cloudflared v0.1.3-0.20260706062323-d9787e794aa3 h1:3y6++yIa8XlDhxPkpR4p+7RUHVY2KTP9CPIGnWmOlO8=
 github.com/sagernet/sing-cloudflared v0.1.3-0.20260706062323-d9787e794aa3/go.mod h1:XEqEDYRCAYLaoPjZ1ifVWJg5iWAJHL2gOAXe/PM28Cg=
 github.com/sagernet/sing-mux v0.3.5 h1:RHnhVEc+SFqkrK4xMygYjDwwLhzp2Bj3lztSukONfhI=
