@@ -15,7 +15,7 @@ require (
 	github.com/sagernet/sing v0.9.0-beta.2
 	github.com/sagernet/sing-box v1.13.19-0.20260813120727-db1053f8bc16
 	github.com/shirou/gopsutil/v4 v4.26.7
-	github.com/sirupsen/logrus v1.9.4
+	github.com/sirupsen/logrus v1.10.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
 	golang.org/x/crypto v0.54.0
