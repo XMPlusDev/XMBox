@@ -262,18 +262,20 @@ func (l *Limiter) DrainDeltas(tag string, tc *counter.TrafficCounter) *PendingTr
 			return true
 		}
 
+		// Result and Counters are appended in lockstep and must stay that way:
+		// Chunk slices them by the same index so each batch carries the
+		// counters for its own records. GetCounter uses LoadOrStore, so it
+		// always returns storage.
 		pending.Result = append(pending.Result, api.SubscriptionTraffic{
 			Id:       sub.Id,
 			Upload:   up,
 			Download: down,
 		})
-		if s := tc.GetCounter(email); s != nil {
-			pending.Counters = append(pending.Counters, pendingCounter{
-				storage: s,
-				up:      up,
-				down:    down,
-			})
-		}
+		pending.Counters = append(pending.Counters, pendingCounter{
+			storage: tc.GetCounter(email),
+			up:      up,
+			down:    down,
+		})
 		return true
 	})
 
@@ -281,6 +283,38 @@ func (l *Limiter) DrainDeltas(tag string, tc *counter.TrafficCounter) *PendingTr
 		return nil
 	}
 	return pending
+}
+
+// Add appends one record together with the counter it was drained from.
+//
+// DrainDeltas is the usual producer; this exists so a PendingTraffic can also
+// be assembled directly, since the type is consumed outside this package.
+func (p *PendingTraffic) Add(record api.SubscriptionTraffic, storage *counter.TrafficStorage, up, down int64) {
+	p.Result = append(p.Result, record)
+	p.Counters = append(p.Counters, pendingCounter{storage: storage, up: up, down: down})
+}
+
+// Chunk splits pending into batches of at most size records.
+//
+// Each batch keeps the counters belonging to its own records, so it can be
+// reported and reset independently: one batch failing must neither discard
+// counters another batch delivered nor retain ones it did not.
+func (p *PendingTraffic) Chunk(size int) []*PendingTraffic {
+	if p == nil || size <= 0 || len(p.Result) <= size {
+		if p == nil || len(p.Result) == 0 {
+			return nil
+		}
+		return []*PendingTraffic{p}
+	}
+	chunks := make([]*PendingTraffic, 0, (len(p.Result)+size-1)/size)
+	for start := 0; start < len(p.Result); start += size {
+		end := min(start+size, len(p.Result))
+		chunks = append(chunks, &PendingTraffic{
+			Result:   p.Result[start:end],
+			Counters: p.Counters[start:end],
+		})
+	}
+	return chunks
 }
 
 // ResetTraffic subtracts the reported amounts from the in-memory counters.

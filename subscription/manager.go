@@ -257,6 +257,66 @@ func (m *Manager) Remove(ib interface{ Tag() string }, protocol string, emails [
 	}
 }
 
+// reverbBatchSize is how many records go into one Reverb push.
+//
+// Reverb enforces a per-message ceiling (config/reverb.php max_message_size,
+// 10,000 bytes by default) and rejects anything larger on receipt. That
+// rejection is invisible to the sender — the local write has already returned
+// success — so a batch must be kept under the ceiling rather than discovered
+// to be over it. A traffic record is at most ~77 bytes with int64 counters at
+// full width, an online-IP record ~78 with an IPv6 address, so 100 records plus
+// the envelope stays under 8 KB either way.
+const reverbBatchSize = 100
+
+// reportTraffic delivers drained counters to the panel and resets only what was
+// actually delivered.
+//
+// Batches are pushed one at a time and reset individually. Whatever the push
+// could not deliver is retried over the HTTP API and reset only if that
+// succeeds, so a failure at either layer leaves the counters intact for the
+// next cycle instead of silently dropping the traffic.
+func (m *Manager) reportTraffic(pending *limiter.PendingTraffic, logPrefix string, pusher func(string, any) error) {
+	var undelivered []*limiter.PendingTraffic
+	pushed := 0
+
+	for _, chunk := range pending.Chunk(reverbBatchSize) {
+		if pusher == nil {
+			undelivered = append(undelivered, chunk)
+			continue
+		}
+		traffic := make([]api.Traffic, len(chunk.Result))
+		for idx, t := range chunk.Result {
+			traffic[idx] = api.Traffic{Id: t.Id, Upload: t.Upload, Download: t.Download}
+		}
+		if err := pusher("traffic_report", traffic); err != nil {
+			log.Printf("%s Failed to push traffic data via Reverb: %v", logPrefix, err)
+			undelivered = append(undelivered, chunk)
+			continue
+		}
+		limiter.ResetTraffic(chunk)
+		pushed += len(chunk.Result)
+	}
+	if pushed > 0 {
+		log.Printf("%s Pushed %d Traffic Usage Data via Reverb", logPrefix, pushed)
+	}
+	if len(undelivered) == 0 {
+		return
+	}
+
+	records := make([]api.SubscriptionTraffic, 0, len(undelivered)*reverbBatchSize)
+	for _, chunk := range undelivered {
+		records = append(records, chunk.Result...)
+	}
+	if err := m.client.ReportTraffic(&records); err != nil {
+		log.Print(err)
+		return
+	}
+	log.Printf("%s Report %d Subscription Traffic Usage Data", logPrefix, len(records))
+	for _, chunk := range undelivered {
+		limiter.ResetTraffic(chunk)
+	}
+}
+
 // SubscriptionMonitor reports traffic and online IPs to the panel. If pusher
 // is non-nil, reports are pushed over the Reverb WebSocket instead of the
 // regular HTTP API.
@@ -266,30 +326,8 @@ func (m *Manager) SubscriptionMonitor(tag, logPrefix string, pusher func(string,
 		return nil
 	}
 
-	pending := limiter.DrainDeltas(tag, tc)
-	if pending != nil && len(pending.Result) > 0 {
-		pushed := false
-		if pusher != nil {
-			traffic := make([]api.Traffic, len(pending.Result))
-			for idx, t := range pending.Result {
-				traffic[idx] = api.Traffic{Id: t.Id, Upload: t.Upload, Download: t.Download}
-			}
-			if err := pusher("traffic_report", traffic); err != nil {
-				log.Printf("%s Failed to push traffic data via Reverb: %v", logPrefix, err)
-			} else {
-				limiter.ResetTraffic(pending)
-				log.Printf("%s Pushed %d Traffic Usage Data via Reverb", logPrefix, len(pending.Result))
-				pushed = true
-			}
-		}
-		if !pushed {
-			if err := m.client.ReportTraffic(&pending.Result); err != nil {
-				log.Print(err)
-			} else {
-				log.Printf("%s Report %d Subscription Traffic Usage Data", logPrefix, len(pending.Result))
-				limiter.ResetTraffic(pending)
-			}
-		}
+	if pending := limiter.DrainDeltas(tag, tc); pending != nil {
+		m.reportTraffic(pending, logPrefix, pusher)
 	}
 
 	onlineIPs, err := limiter.GetOnlineIPs(tag)
@@ -298,15 +336,24 @@ func (m *Manager) SubscriptionMonitor(tag, logPrefix string, pusher func(string,
 	} else if onlineIPs != nil && len(*onlineIPs) > 0 {
 		pushed := false
 		if pusher != nil {
-			aliveIPs := make([]api.AliveIP, len(*onlineIPs))
-			for idx, ip := range *onlineIPs {
-				aliveIPs[idx] = api.AliveIP{Id: ip.Id, IP: ip.IP}
+			// Batched for the same reason as traffic, and this list is often
+			// the larger of the two: ip_limit allows several records per
+			// subscription.
+			pushed = true
+			for start := 0; start < len(*onlineIPs); start += reverbBatchSize {
+				batch := (*onlineIPs)[start:min(start+reverbBatchSize, len(*onlineIPs))]
+				aliveIPs := make([]api.AliveIP, len(batch))
+				for idx, ip := range batch {
+					aliveIPs[idx] = api.AliveIP{Id: ip.Id, IP: ip.IP}
+				}
+				if err := pusher("online_ips", aliveIPs); err != nil {
+					log.Printf("%s Failed to push online IPs via Reverb: %v", logPrefix, err)
+					pushed = false
+					break
+				}
 			}
-			if err := pusher("online_ips", aliveIPs); err != nil {
-				log.Printf("%s Failed to push online IPs via Reverb: %v", logPrefix, err)
-			} else {
+			if pushed {
 				log.Printf("%s Pushed %d Online IPs Data via Reverb", logPrefix, len(*onlineIPs))
-				pushed = true
 			}
 		}
 		if !pushed {
