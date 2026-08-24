@@ -28,10 +28,16 @@ type SubscriptionInfo struct {
 
 // ipKeyPrefix namespaces the per-subscription IP hashes.
 //
-// Deliberately different from the key the previous format used. That one held a
-// serialised map as a plain string, and a hash command against it would fail
-// with WRONGTYPE; old keys simply expire on their own TTL instead.
-const ipKeyPrefix = "xmbox:ip:"
+// Shared verbatim with XMRay. ip_limit is a property of the subscription, not
+// of whichever backend served the connection, so both must count into the same
+// hash — otherwise a user reaches the limit separately on each and effectively
+// gets twice the addresses. This relies on node tags being unique across both,
+// which holds because each tag carries the panel's node ID.
+//
+// Also deliberately different from the key the previous format used: that one
+// held a serialised map as a plain string, and a hash command against it would
+// fail with WRONGTYPE. Old keys expire on their own TTL.
+const ipKeyPrefix = "xmplus:ip:"
 
 // ipKey returns the hash holding one subscription's connected addresses.
 func ipKey(subscription string) string { return ipKeyPrefix + subscription }
