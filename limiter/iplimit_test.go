@@ -8,6 +8,7 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
+	"golang.org/x/time/rate"
 )
 
 // newTestLimiter returns an InboundInfo wired to an in-process Redis.
@@ -228,6 +229,71 @@ func TestGetOnlineIPsClearsOnlyOwnTag(t *testing.T) {
 	remaining := hkeys(t, mr, ipKey("user@x"))
 	if len(remaining) != 1 || remaining[0] != ipField("192.0.2.3", "node_b") {
 		t.Errorf("remaining fields = %v, want only the other node's entry", remaining)
+	}
+}
+
+// The sweep must scale past one batch. It used to issue a command per
+// subscription under a single shared deadline, so on a node with many of them
+// the budget ran out partway through and every remaining one failed with
+// "context deadline exceeded".
+func TestGetOnlineIPsAcrossManySubscriptions(t *testing.T) {
+	info, _ := newTestLimiter(t, testTag)
+	const subscriptions = redisBatchSize*3 + 7 // spans several batches unevenly
+
+	for i := range subscriptions {
+		email := fmt.Sprintf("%s_user%d@x", testTag, i)
+		info.SubscriptionInfo.Store(email, SubscriptionInfo{Id: i + 1})
+		if checkIPLimit(info, email, i+1, fmt.Sprintf("192.0.2.%d", i%256), 0, testTag) {
+			t.Fatalf("subscription %d rejected", i)
+		}
+	}
+
+	l := &Limiter{InboundInfo: new(sync.Map)}
+	l.InboundInfo.Store(testTag, info)
+
+	online, err := l.GetOnlineIPs(testTag)
+	if err != nil {
+		t.Fatalf("GetOnlineIPs: %v", err)
+	}
+	if len(*online) != subscriptions {
+		t.Errorf("reported %d addresses, want all %d — the sweep dropped some", len(*online), subscriptions)
+	}
+
+	// A second sweep must find nothing: everything reported was cleared.
+	online, err = l.GetOnlineIPs(testTag)
+	if err != nil {
+		t.Fatalf("second GetOnlineIPs: %v", err)
+	}
+	if len(*online) != 0 {
+		t.Errorf("second sweep reported %d addresses, want 0", len(*online))
+	}
+}
+
+// A rate bucket is dropped only when Redis confirms the subscription has
+// nothing tracked — never because a read failed.
+func TestGetOnlineIPsBucketCleanup(t *testing.T) {
+	info, _ := newTestLimiter(t, testTag)
+	const active = testTag + "_active@x"
+	const idle = testTag + "_idle@x"
+
+	info.SubscriptionInfo.Store(active, SubscriptionInfo{Id: 1})
+	info.SubscriptionInfo.Store(idle, SubscriptionInfo{Id: 2})
+	info.BucketHub.Store(active, rate.NewLimiter(1, 1))
+	info.BucketHub.Store(idle, rate.NewLimiter(1, 1))
+
+	checkIPLimit(info, active, 1, "192.0.2.1", 0, testTag)
+
+	l := &Limiter{InboundInfo: new(sync.Map)}
+	l.InboundInfo.Store(testTag, info)
+	if _, err := l.GetOnlineIPs(testTag); err != nil {
+		t.Fatalf("GetOnlineIPs: %v", err)
+	}
+
+	if _, ok := info.BucketHub.Load(idle); ok {
+		t.Error("the idle subscription kept its bucket")
+	}
+	if _, ok := info.BucketHub.Load(active); !ok {
+		t.Error("the active subscription lost its bucket")
 	}
 }
 

@@ -42,6 +42,13 @@ const ipKeyPrefix = "xmplus:ip:"
 // ipKey returns the hash holding one subscription's connected addresses.
 func ipKey(subscription string) string { return ipKeyPrefix + subscription }
 
+// redisBatchSize is how many commands go into one pipelined round trip.
+//
+// The online-IP sweep touches every subscription on the node. Issued one at a
+// time that is thousands of sequential round trips, which is what exhausted the
+// deadline; pipelined, it is a handful.
+const redisBatchSize = 256
+
 // ipField identifies one address on one node. The tag is part of the field so a
 // single address in use on two nodes stays distinguishable; "|" is a safe
 // separator because neither IPv4 nor IPv6 literals contain it.
@@ -402,57 +409,94 @@ func (l *Limiter) GetOnlineIPs(tag string) (*[]api.OnlineIP, error) {
 		return &online, nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), info.GlobalIPLimit.config.timeout())
-	defer cancel()
-
 	client := info.GlobalIPLimit.client
+	suffix := "|" + tag
 
-	// Drop rate buckets for subscriptions with nothing tracked any more. The
-	// key's existence is the answer now, so no payload has to be fetched.
-	info.BucketHub.Range(func(key, _ interface{}) bool {
+	// Snapshot the subscriptions before touching Redis, so the sweep below is
+	// not holding a sync.Map iteration open across every round trip.
+	type target struct{ email, key string }
+	var targets []target
+	info.SubscriptionInfo.Range(func(key, _ interface{}) bool {
 		email := key.(string)
-		if _, ok := info.SubscriptionInfo.Load(email); !ok {
-			return true
-		}
-		n, err := client.Exists(ctx, ipKey(strings.TrimPrefix(email, tag+"_"))).Result()
-		if err != nil || n == 0 {
-			info.BucketHub.Delete(email)
-		}
+		targets = append(targets, target{email, ipKey(strings.TrimPrefix(email, tag+"_"))})
 		return true
 	})
 
-	// Collect this tag's addresses and clear them.
-	suffix := "|" + tag
-	info.SubscriptionInfo.Range(func(key, _ interface{}) bool {
-		email := key.(string)
-		redisKey := ipKey(strings.TrimPrefix(email, tag+"_"))
+	// Subscriptions Redis knows nothing about, learned from the sweep itself
+	// rather than from a second EXISTS per bucket.
+	untracked := make(map[string]bool, len(targets))
 
-		fields, err := client.HGetAll(ctx, redisKey).Result()
-		if err != nil {
-			log.Printf("[Limiter] failed to read online IPs for %s: %v", redisKey, err)
-			return true
+	for start := 0; start < len(targets); start += redisBatchSize {
+		batch := targets[start:min(start+redisBatchSize, len(targets))]
+
+		// One deadline per batch, not one for the whole sweep. A single budget
+		// spanning every subscription expires partway through on a busy node,
+		// and each one after that fails for no reason of its own.
+		ctx, cancel := context.WithTimeout(context.Background(), info.GlobalIPLimit.config.timeout())
+
+		reads := make([]*redis.MapStringStringCmd, len(batch))
+		if _, err := client.Pipelined(ctx, func(p redis.Pipeliner) error {
+			for i, t := range batch {
+				reads[i] = p.HGetAll(ctx, t.key)
+			}
+			return nil
+		}); err != nil {
+			log.Printf("[Limiter] failed to read online IPs: %v", err)
 		}
 
-		claimed := make([]string, 0, len(fields))
-		for field, uid := range fields {
-			if !strings.HasSuffix(field, suffix) {
-				continue // another node's entry for the same subscription
-			}
-			id, convErr := strconv.Atoi(uid)
-			if convErr != nil {
+		deletes := make(map[string][]string, len(batch))
+		for i, t := range batch {
+			fields, err := reads[i].Result()
+			if err != nil {
+				// Leave the bucket alone: a failed read does not mean the
+				// subscription has gone quiet.
 				continue
 			}
-			online = append(online, api.OnlineIP{Id: id, IP: strings.TrimSuffix(field, suffix)})
-			claimed = append(claimed, field)
+			if len(fields) == 0 {
+				untracked[t.email] = true
+				continue
+			}
+			claimed := make([]string, 0, len(fields))
+			for field, uid := range fields {
+				if !strings.HasSuffix(field, suffix) {
+					continue // another node's entry for the same subscription
+				}
+				id, convErr := strconv.Atoi(uid)
+				if convErr != nil {
+					continue
+				}
+				online = append(online, api.OnlineIP{Id: id, IP: strings.TrimSuffix(field, suffix)})
+				claimed = append(claimed, field)
+			}
+			if len(claimed) > 0 {
+				deletes[t.key] = claimed
+			}
 		}
 
 		// Only the fields just read are deleted, so an address recorded between
 		// the read and the delete stays to be reported next cycle rather than
 		// being dropped unreported.
-		if len(claimed) > 0 {
-			if err := client.HDel(ctx, redisKey, claimed...).Err(); err != nil {
-				log.Printf("[Limiter] failed to clear reported IPs for %s: %v", redisKey, err)
+		if len(deletes) > 0 {
+			if _, err := client.Pipelined(ctx, func(p redis.Pipeliner) error {
+				for key, fields := range deletes {
+					p.HDel(ctx, key, fields...)
+				}
+				return nil
+			}); err != nil {
+				log.Printf("[Limiter] failed to clear reported IPs: %v", err)
 			}
+		}
+		cancel()
+	}
+
+	// Drop rate buckets for subscriptions Redis is no longer tracking.
+	info.BucketHub.Range(func(key, _ interface{}) bool {
+		email := key.(string)
+		if _, ok := info.SubscriptionInfo.Load(email); !ok {
+			return true
+		}
+		if untracked[email] {
+			info.BucketHub.Delete(email)
 		}
 		return true
 	})
