@@ -6,7 +6,7 @@ require (
 	dario.cat/mergo v1.0.2
 	github.com/bitly/go-simplejson v0.5.1
 	github.com/fsnotify/fsnotify v1.10.1
-	github.com/go-acme/lego/v5 v5.3.1
+	github.com/go-acme/lego/v5 v5.4.0
 	github.com/go-resty/resty/v2 v2.17.2
 	github.com/gorilla/websocket v1.5.3
 	github.com/redis/go-redis/v9 v9.22.0
