@@ -21,8 +21,7 @@ import (
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 
-	anytls "github.com/anytls/sing-anytls"
-	"github.com/anytls/sing-anytls/padding"
+	anytls "github.com/sagernet/sing-anytls"
 )
 
 type AnyTLSInbound struct {
@@ -32,10 +31,10 @@ type AnyTLSInbound struct {
 	logger    logger.ContextLogger
 	listener  *listener.Listener
 
-	service *anytls.Service
+	service *anytls.MultiService[string]
 
 	mu    sync.Mutex
-	users []anytls.User
+	users []option.AnyTLSUser
 }
 
 func RegisterAnyTLS(registry *inbound.Registry) {
@@ -53,6 +52,7 @@ func newAnyTLSInbound(
 		Adapter: inbound.NewAdapter(C.TypeAnyTLS, tag),
 		router:  uot.NewRouter(router, logger),
 		logger:  logger,
+		users:   options.Users,
 	}
 
 	if options.TLS != nil && options.TLS.Enabled {
@@ -63,17 +63,13 @@ func newAnyTLSInbound(
 		h.tlsConfig = tlsConfig
 	}
 
-	paddingScheme := padding.DefaultPaddingScheme
+	var paddingScheme []byte
 	if len(options.PaddingScheme) > 0 {
 		paddingScheme = []byte(strings.Join(options.PaddingScheme, "\n"))
 	}
 
-	h.users = common.Map(options.Users, func(it option.AnyTLSUser) anytls.User {
-		return (anytls.User)(it)
-	})
-
-	svc, err := anytls.NewService(anytls.ServiceConfig{
-		Users:         h.users,
+	service, err := anytls.NewMultiService[string](anytls.ServiceOptions{
+	    //Users:         h.users,
 		PaddingScheme: paddingScheme,
 		Handler:       (*anytlsHandler)(h),
 		Logger:        logger,
@@ -81,7 +77,15 @@ func newAnyTLSInbound(
 	if err != nil {
 		return nil, err
 	}
-	h.service = svc
+
+	err = service.UpdateUsers(
+		common.Map(h.users, func(it option.AnyTLSUser) string { return it.Name }),
+		common.Map(h.users, func(it option.AnyTLSUser) string { return it.Password }),
+	)
+	if err != nil {
+		return nil, err
+	}
+	h.service = service
 
 	h.listener = listener.New(listener.Options{
 		Context:           ctx,
@@ -117,16 +121,17 @@ func (h *AnyTLSInbound) AddUsers(users []option.AnyTLSUser) error {
 		idx[u.Name] = i
 	}
 	for _, u := range users {
-		au := (anytls.User)(u)
-		if i, ok := idx[au.Name]; ok {
-			h.users[i] = au 
+		if i, ok := idx[u.Name]; ok {
+			h.users[i] = u
 		} else {
-			idx[au.Name] = len(h.users)
-			h.users = append(h.users, au)
+			idx[u.Name] = len(h.users)
+			h.users = append(h.users, u)
 		}
 	}
-	h.service.UpdateUsers(h.users)
-	return nil
+	return h.service.UpdateUsers(
+		common.Map(h.users, func(it option.AnyTLSUser) string { return it.Name }),
+		common.Map(h.users, func(it option.AnyTLSUser) string { return it.Password }),
+	)
 }
 
 func (h *AnyTLSInbound) DelUsers(names []string) error {
@@ -143,8 +148,10 @@ func (h *AnyTLSInbound) DelUsers(names []string) error {
 		}
 	}
 	h.users = remaining
-	h.service.UpdateUsers(h.users)
-	return nil
+	return h.service.UpdateUsers(
+		common.Map(h.users, func(it option.AnyTLSUser) string { return it.Name }),
+		common.Map(h.users, func(it option.AnyTLSUser) string { return it.Password }),
+	)
 }
 
 func (h *AnyTLSInbound) NewConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext, onClose N.CloseHandlerFunc) {
@@ -170,6 +177,7 @@ func (h *anytlsHandler) NewConnectionEx(ctx context.Context, conn net.Conn, sour
 	var metadata adapter.InboundContext
 	metadata.Inbound = h.Tag()
 	metadata.InboundType = h.Type()
+	//nolint:staticcheck
 	metadata.InboundDetour = h.listener.ListenOptions().Detour
 	metadata.Source = source
 	metadata.Destination = destination.Unwrap()

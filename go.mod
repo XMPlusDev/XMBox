@@ -1,6 +1,6 @@
 module github.com/xmplusdev/xmbox
 
-go 1.25.5
+go 1.26.4
 
 require (
 	dario.cat/mergo v1.0.2
@@ -282,6 +282,7 @@ require (
 	github.com/sagernet/gvisor v0.0.0-20260727.0-sing-box-mod.1 // indirect
 	github.com/sagernet/netlink v0.0.0-20260814022025-64455d367bbf // indirect
 	github.com/sagernet/nftables v0.3.0-mod.4 // indirect
+	github.com/sagernet/sing-anytls v0.0.0-20260904135308-cec2d74334be // indirect
 	github.com/sagernet/sing-cloudflared v0.1.3-0.20260706062323-d9787e794aa3 // indirect
 	github.com/sagernet/sing-mux v0.3.5 // indirect
 	github.com/sagernet/sing-openconnect v0.0.0-20260810065514-53aa8058f8df // indirect

@@ -16,8 +16,6 @@ import (
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	qtls "github.com/sagernet/sing-quic"
-	"github.com/sagernet/sing-quic/congestion_bbr1"
-	"github.com/sagernet/sing-quic/congestion_bbr2"
 	congestion_meta1 "github.com/sagernet/sing-quic/congestion_meta1"
 	congestion_meta2 "github.com/sagernet/sing-quic/congestion_meta2"
 	"github.com/sagernet/sing/common"
@@ -41,7 +39,7 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		
+
 		if !common.Contains(tlsConfig.NextProtos(), http3.NextProtoH3) {
 			tlsConfig.SetNextProtos(append(append([]string{}, tlsConfig.NextProtos()...), http3.NextProtoH3))
 		}
@@ -60,44 +58,17 @@ func init() {
 		switch options.QUICCongestionControl {
 		case "", "bbr":
 			congestionControl = func(conn *quic.Conn) congestion.CongestionControl {
-				return congestion_meta2.NewBbrSender(
+				return congestion_meta2.NewBbrSenderWithProfile(
 					congestion_meta2.DefaultClock{TimeFunc: timeFunc},
-					congestion.ByteCount(conn.Config().InitialPacketSize),
-					congestion.ByteCount(congestion_meta1.InitialCongestionWindow),
-				)
-			}
-		case "bbr_standard":
-			congestionControl = func(conn *quic.Conn) congestion.CongestionControl {
-				return congestion_bbr1.NewBbrSender(
-					congestion_bbr1.DefaultClock{TimeFunc: timeFunc},
-					congestion.ByteCount(conn.Config().InitialPacketSize),
-					congestion_bbr1.InitialCongestionWindowPackets,
-					congestion_bbr1.MaxCongestionWindowPackets,
-				)
-			}
-		case "bbr2":
-			congestionControl = func(conn *quic.Conn) congestion.CongestionControl {
-				return congestion_bbr2.NewBBR2Sender(
-					congestion_bbr2.DefaultClock{TimeFunc: timeFunc},
-					congestion.ByteCount(conn.Config().InitialPacketSize),
-					0,
-					false,
-				)
-			}
-		case "bbr2_variant":
-			congestionControl = func(conn *quic.Conn) congestion.CongestionControl {
-				return congestion_bbr2.NewBBR2Sender(
-					congestion_bbr2.DefaultClock{TimeFunc: timeFunc},
-					congestion.ByteCount(conn.Config().InitialPacketSize),
-					32*congestion.ByteCount(conn.Config().InitialPacketSize),
-					true,
+					conn.InitialPacketSize(),
+					congestion_meta2.ProfileStandard,
 				)
 			}
 		case "cubic":
 			congestionControl = func(conn *quic.Conn) congestion.CongestionControl {
 				return congestion_meta1.NewCubicSender(
 					congestion_meta1.DefaultClock{TimeFunc: timeFunc},
-					congestion.ByteCount(conn.Config().InitialPacketSize),
+					conn.InitialPacketSize(),
 					false,
 				)
 			}
@@ -105,7 +76,7 @@ func init() {
 			congestionControl = func(conn *quic.Conn) congestion.CongestionControl {
 				return congestion_meta1.NewCubicSender(
 					congestion_meta1.DefaultClock{TimeFunc: timeFunc},
-					congestion.ByteCount(conn.Config().InitialPacketSize),
+					conn.InitialPacketSize(),
 					true,
 				)
 			}
@@ -116,7 +87,8 @@ func init() {
 
 		quicListener, err := qtls.ListenEarly(udpConn, tlsConfig, &quic.Config{
 			MaxIncomingStreams: 1 << 60,
-			Allow0RTT:         true,
+			Allow0RTT:          true,
+			DisablePathManager: true,
 		})
 		if err != nil {
 			udpConn.Close()

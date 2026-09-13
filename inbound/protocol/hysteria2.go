@@ -360,6 +360,6 @@ func (h *Hysteria2Inbound) userName(index int) string {
 	return (*snap)[index]
 }
 
-func (h *Hysteria2Inbound) InterfaceUpdated() {
+func (h *Hysteria2Inbound) InterfaceUpdated(ctx context.Context) {
 	h.service.Reset()
 }

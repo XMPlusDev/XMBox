@@ -203,7 +203,7 @@ func (h *ShadowTLSInbound) rebuildService() error {
 		Version:  h.baseVersion,
 		Password: h.basePassword,
 		Users: common.Map(h.users, func(it option.ShadowTLSUser) shadowtls.User {
-			return (shadowtls.User)(it)
+			return shadowtls.User(it)
 		}),
 		Handshake:              h.baseHandshake,
 		HandshakeForServerName: h.baseHSForSNI,
