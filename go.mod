@@ -25,7 +25,7 @@ require (
 require (
 	github.com/alicebob/miniredis/v2 v2.38.0
 	github.com/gofrs/uuid/v5 v5.5.1
-	github.com/sagernet/quic-go v0.61.0-sing-box-mod.5
+	github.com/sagernet/quic-go v0.61.0-sing-box-mod.7
 	github.com/sagernet/sing-anytls v0.0.0-20260904135308-cec2d74334be
 	github.com/sagernet/sing-quic v0.7.0-beta.3
 	github.com/sagernet/sing-shadowsocks v0.2.9
