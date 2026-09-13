@@ -58,11 +58,7 @@ func init() {
 		switch options.QUICCongestionControl {
 		case "", "bbr":
 			congestionControl = func(conn *quic.Conn) congestion.CongestionControl {
-				return congestion_meta2.NewBbrSenderWithProfile(
-					congestion_meta2.DefaultClock{TimeFunc: timeFunc},
-					conn.InitialPacketSize(),
-					congestion_meta2.ProfileStandard,
-				)
+				return congestion_meta2.NewBbrSenderWithProfile(conn.InitialPacketSize(), congestion_meta2.ProfileStandard)
 			}
 		case "cubic":
 			congestionControl = func(conn *quic.Conn) congestion.CongestionControl {
