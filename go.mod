@@ -16,8 +16,8 @@ require (
 	github.com/sirupsen/logrus v1.10.2
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
-	golang.org/x/crypto v0.55.0
-	golang.org/x/net v0.58.0
+	golang.org/x/crypto v0.57.0
+	golang.org/x/net v0.59.0
 	golang.org/x/time v0.15.0
 	lukechampine.com/blake3 v1.4.1
 )
@@ -62,7 +62,6 @@ require (
 	github.com/andybalholm/brotli v1.1.0 // indirect
 	github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be // indirect
 	github.com/anthropics/anthropic-sdk-go v1.26.0 // indirect
-	github.com/anytls/sing-anytls v0.0.13 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.45.1 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.33.1 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.1 // indirect
@@ -351,12 +350,12 @@ require (
 	go4.org/mem v0.0.0-20240501181205-ae6ca9944745 // indirect
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba // indirect
 	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f // indirect
-	golang.org/x/mod v0.38.0 // indirect
+	golang.org/x/mod v0.41.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
-	golang.org/x/sync v0.22.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/term v0.45.0 // indirect
-	golang.org/x/text v0.41.0 // indirect
+	golang.org/x/sync v0.23.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/term v0.46.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	golang.zx2c4.com/wireguard/windows v0.5.3 // indirect
 	google.golang.org/api v0.295.0 // indirect
