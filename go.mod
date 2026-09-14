@@ -18,7 +18,7 @@ require (
 	github.com/spf13/viper v1.21.0
 	golang.org/x/crypto v0.57.0
 	golang.org/x/net v0.59.0
-	golang.org/x/time v0.15.0
+	golang.org/x/time v0.16.0
 	lukechampine.com/blake3 v1.4.1
 )
 
