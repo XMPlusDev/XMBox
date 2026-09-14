@@ -23,7 +23,7 @@ require (
 )
 
 require (
-	github.com/alicebob/miniredis/v2 v2.38.0
+	github.com/alicebob/miniredis/v2 v2.39.0
 	github.com/gofrs/uuid/v5 v5.5.1
 	github.com/sagernet/quic-go v0.61.0-sing-box-mod.7
 	github.com/sagernet/sing-anytls v0.0.0-20260904135308-cec2d74334be
@@ -62,7 +62,6 @@ require (
 	github.com/andybalholm/brotli v1.1.0 // indirect
 	github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be // indirect
 	github.com/anthropics/anthropic-sdk-go v1.26.0 // indirect
-	github.com/anytls/sing-anytls v0.0.13 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.45.1 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.33.1 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.1 // indirect
