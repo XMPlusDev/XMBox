@@ -10,8 +10,8 @@ require (
 	github.com/go-resty/resty/v2 v2.17.2
 	github.com/gorilla/websocket v1.5.3
 	github.com/redis/go-redis/v9 v9.22.0
-	github.com/sagernet/sing v0.9.4
-	github.com/sagernet/sing-box v1.15.0-alpha.3
+	github.com/sagernet/sing v0.9.5-0.20260914135810-80bfa92a0607
+	github.com/sagernet/sing-box v1.15.0-alpha.4
 	github.com/shirou/gopsutil/v4 v4.26.8
 	github.com/sirupsen/logrus v1.10.2
 	github.com/spf13/cobra v1.10.2
@@ -30,7 +30,7 @@ require (
 	github.com/sagernet/sing-quic v0.7.1-0.20260904135313-497364e8ee3e
 	github.com/sagernet/sing-shadowsocks v0.2.9
 	github.com/sagernet/sing-shadowtls v0.2.1
-	github.com/sagernet/sing-tun v0.9.4-0.20260912075549-869f0a4d76af
+	github.com/sagernet/sing-tun v0.9.4-0.20260914145202-3a0d3878577a
 	github.com/sagernet/sing-vmess v0.2.8
 )
 
@@ -286,7 +286,7 @@ require (
 	github.com/sagernet/sing-snell v0.0.0-20260904135315-bc5a12ac736f // indirect
 	github.com/sagernet/sing-usbip v0.0.0-20260817040617-28bd42667eca // indirect
 	github.com/sagernet/smux v1.5.50-sing-box-mod.1 // indirect
-	github.com/sagernet/tailscale v1.102.1-sing-box-1.14-mod.4 // indirect
+	github.com/sagernet/tailscale v1.102.1-sing-box-1.14-mod.5 // indirect
 	github.com/sagernet/wireguard-go v0.0.6 // indirect
 	github.com/sagernet/ws v0.0.0-20231204124109-acfe8907c854 // indirect
 	github.com/sagikazarmark/locafero v0.11.0 // indirect
