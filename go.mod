@@ -30,7 +30,7 @@ require (
 	github.com/sagernet/sing-quic v0.7.1-0.20260904135313-497364e8ee3e
 	github.com/sagernet/sing-shadowsocks v0.2.9
 	github.com/sagernet/sing-shadowtls v0.2.1
-	github.com/sagernet/sing-tun v0.9.4-0.20260917142847-fbc0c3dff312
+	github.com/sagernet/sing-tun v0.9.5
 	github.com/sagernet/sing-vmess v0.2.8
 )
 
