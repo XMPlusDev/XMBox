@@ -11,6 +11,7 @@ import (
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/adapter/inbound"
+	"github.com/sagernet/sing-box/common/badhttp"
 	"github.com/sagernet/sing-box/common/listener"
 	"github.com/sagernet/sing-box/common/tls"
 	"github.com/sagernet/sing-box/common/uot"
@@ -25,7 +26,6 @@ import (
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 	aTLS "github.com/sagernet/sing/common/tls"
-	sHttp "github.com/sagernet/sing/protocol/http"
 
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
@@ -220,7 +220,7 @@ func (h *NaiveInbound) ServeHTTP(writer http.ResponseWriter, request *http.Reque
 		h.logBadRequest(ctx, request, E.New("missing naive padding"))
 		return
 	}
-	userName, password, authOk := sHttp.ParseBasicAuth(request.Header.Get("Proxy-Authorization"))
+	userName, password, authOk := badhttp.ParseBasicAuth(request.Header.Get("Proxy-Authorization"))
 	if authOk {
 		// auth.NewAuthenticator returns nil for an empty user list, and Verify
 		// panics on a nil receiver.
@@ -243,7 +243,7 @@ func (h *NaiveInbound) ServeHTTP(writer http.ResponseWriter, request *http.Reque
 			hostPort = request.Host
 		}
 	}
-	source := sHttp.SourceAddress(request)
+	source := badhttp.SourceAddress(request)
 	destination := M.ParseSocksaddr(hostPort).Unwrap()
 
 	if hijacker, ok := writer.(http.Hijacker); ok {

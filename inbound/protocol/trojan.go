@@ -38,6 +38,7 @@ type TrojanInbound struct {
 	fallbackAddr             M.Socksaddr
 	fallbackAddrTLSNextProto map[string]M.Socksaddr
 	service                  *trojan.Service[int]
+	references []string
 
 	mu       sync.Mutex
 	users    []option.TrojanUser
@@ -76,6 +77,9 @@ func newTrojanInbound(
 			return nil, err
 		}
 		h.tlsConfig = tlsConfig
+		if options.TLS.Reality != nil && options.TLS.Reality.Enabled && options.TLS.Reality.Handshake.Detour != "" {
+			h.references = []string{options.TLS.Reality.Handshake.Detour}
+		}
 	}
 
 	var fallbackHandler N.TCPConnectionHandlerEx
@@ -145,6 +149,10 @@ func newTrojanInbound(
 		ConnectionHandler: h,
 	})
 	return h, nil
+}
+
+func (h *TrojanInbound) References() []string {
+	return h.references
 }
 
 func (h *TrojanInbound) Start(stage adapter.StartStage) error {

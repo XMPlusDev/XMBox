@@ -10,8 +10,8 @@ require (
 	github.com/go-resty/resty/v2 v2.17.2
 	github.com/gorilla/websocket v1.5.3
 	github.com/redis/go-redis/v9 v9.22.0
-	github.com/sagernet/sing v0.9.5-0.20260917164122-8fc5da509c10
-	github.com/sagernet/sing-box v1.15.0-alpha.6
+	github.com/sagernet/sing v0.9.6-0.20260922013359-4ca3bebe0b8e
+	github.com/sagernet/sing-box v1.15.0-alpha.8
 	github.com/shirou/gopsutil/v4 v4.26.8
 	github.com/sirupsen/logrus v1.10.2
 	github.com/spf13/cobra v1.10.2
@@ -26,11 +26,11 @@ require (
 	github.com/alicebob/miniredis/v2 v2.39.0
 	github.com/gofrs/uuid/v5 v5.5.1
 	github.com/sagernet/quic-go v0.61.0-sing-box-mod.7
-	github.com/sagernet/sing-anytls v0.0.0-20260904135308-cec2d74334be
-	github.com/sagernet/sing-quic v0.7.1-0.20260904135313-497364e8ee3e
+	github.com/sagernet/sing-anytls v0.0.0-20260924021732-7ca72921ac6a
+	github.com/sagernet/sing-quic v0.7.1-0.20260924092235-4f371c86a365
 	github.com/sagernet/sing-shadowsocks v0.2.9
 	github.com/sagernet/sing-shadowtls v0.2.1
-	github.com/sagernet/sing-tun v0.9.4-0.20260917142847-fbc0c3dff312
+	github.com/sagernet/sing-tun v0.9.6-0.20260924073434-3077c705bbdb
 	github.com/sagernet/sing-vmess v0.2.8
 )
 
@@ -281,7 +281,7 @@ require (
 	github.com/sagernet/netlink v0.0.0-20260814022025-64455d367bbf // indirect
 	github.com/sagernet/nftables v0.3.0-mod.4 // indirect
 	github.com/sagernet/sing-cloudflared v0.1.3-0.20260706062323-d9787e794aa3 // indirect
-	github.com/sagernet/sing-mux v0.3.7-0.20260905054442-91d1502591ce // indirect
+	github.com/sagernet/sing-mux v0.3.9-0.20260919141002-baf887b90a62 // indirect
 	github.com/sagernet/sing-openconnect v0.0.0-20260903200519-8b89c968949d // indirect
 	github.com/sagernet/sing-openvpn v0.0.0-20260903200517-e060dda5b1f1 // indirect
 	github.com/sagernet/sing-shadowsocks2 v0.2.1 // indirect

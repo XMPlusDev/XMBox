@@ -52,6 +52,7 @@ type VLESSInbound struct {
 	listener  *listener.Listener
 	tlsConfig tls.ServerConfig
 	transport adapter.V2RayServerTransport
+	references []string
 	service   *vless.Service[int]
 
 	// user state — grows monotonically, slots are never reused
@@ -115,6 +116,9 @@ func newVLESSInbound(
 		if err != nil {
 			return nil, err
 		}
+		if options.TLS.Reality != nil && options.TLS.Reality.Enabled && options.TLS.Reality.Handshake.Detour != "" {
+			h.references = []string{options.TLS.Reality.Handshake.Detour}
+		}
 	}
 	if options.Transport != nil {
 		h.transport, err = v2ray.NewServerTransport(ctx, logger,
@@ -135,6 +139,9 @@ func newVLESSInbound(
 }
 
 // ─── lifecycle ────────────────────────────────────────────────────────────────
+func (h *VLESSInbound) References() []string {
+	return h.references
+}
 
 func (h *VLESSInbound) Start(stage adapter.StartStage) error {
 	if stage != adapter.StartStateStart {

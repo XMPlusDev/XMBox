@@ -50,6 +50,7 @@ type ShadowTLSInbound struct {
 
 	// service is swapped atomically on user changes
 	service atomic.Pointer[shadowtls.Service]
+	references []string
 
 	// base config — everything except Users; used to recreate the service
 	mu              sync.Mutex
@@ -93,6 +94,9 @@ func newShadowTLSInbound(
 		handshakeForServerName = make(map[string]shadowtls.HandshakeConfig)
 		if options.HandshakeForServerName != nil {
 			for _, entry := range options.HandshakeForServerName.Entries() {
+				if entry.Value.Detour != "" {
+					h.references = append(h.references, entry.Value.Detour)
+				}
 				d, err := dialer.New(ctx, entry.Value.DialerOptions, entry.Value.ServerIsDomain())
 				if err != nil {
 					return nil, err
@@ -114,6 +118,10 @@ func newShadowTLSInbound(
 	if err != nil {
 		return nil, err
 	}
+	
+	if options.Handshake.Detour != "" {
+		h.references = append(h.references, options.Handshake.Detour)
+	}
 	h.baseHandshake = shadowtls.HandshakeConfig{
 		Server: options.Handshake.ServerOptions.Build(),
 		Dialer: handshakeDialer,
@@ -134,6 +142,10 @@ func newShadowTLSInbound(
 		ConnectionHandler: h,
 	})
 	return h, nil
+}
+
+func (h *ShadowTLSInbound) References() []string {
+	return h.references
 }
 
 func (h *ShadowTLSInbound) Start(stage adapter.StartStage) error {
