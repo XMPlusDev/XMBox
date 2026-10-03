@@ -10,7 +10,7 @@ require (
 	github.com/go-resty/resty/v2 v2.17.2
 	github.com/gorilla/websocket v1.5.3
 	github.com/redis/go-redis/v9 v9.22.0
-	github.com/sagernet/sing v0.9.6-0.20260922013359-4ca3bebe0b8e
+	github.com/sagernet/sing v0.9.6
 	github.com/sagernet/sing-box v1.15.0-alpha.9
 	github.com/shirou/gopsutil/v4 v4.26.8
 	github.com/sirupsen/logrus v1.10.2
