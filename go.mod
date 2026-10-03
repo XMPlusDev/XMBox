@@ -27,7 +27,7 @@ require (
 	github.com/gofrs/uuid/v5 v5.5.1
 	github.com/sagernet/quic-go v0.61.0-sing-box-mod.7
 	github.com/sagernet/sing-anytls v0.0.0-20260924021732-7ca72921ac6a
-	github.com/sagernet/sing-quic v0.7.1-0.20260924092235-4f371c86a365
+	github.com/sagernet/sing-quic v0.7.1
 	github.com/sagernet/sing-shadowsocks v0.2.9
 	github.com/sagernet/sing-shadowtls v0.2.1
 	github.com/sagernet/sing-tun v0.9.6-0.20260925112405-97d11460f2ea
