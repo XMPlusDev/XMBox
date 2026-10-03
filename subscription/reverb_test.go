@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/xmplusdev/xmbox/api"
-	"github.com/xmplusdev/xmbox/counter"
+	"github.com/xmplusdev/xmbox/helper/counter"
 	"github.com/xmplusdev/xmbox/limiter"
 )
 

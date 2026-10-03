@@ -10,7 +10,7 @@ import (
 	"github.com/sagernet/sing/common/json/badoption"
 
 	"github.com/xmplusdev/xmbox/api"
-	"github.com/xmplusdev/xmbox/cert"
+	"github.com/xmplusdev/xmbox/helper/cert"
 )
 
 // ShadowTLSTag returns the tag of the ShadowTLS listener fronting a node.

@@ -10,9 +10,9 @@ import (
 	"github.com/sagernet/sing/common/auth"
 
 	"github.com/xmplusdev/xmbox/api"
-	"github.com/xmplusdev/xmbox/counter"
+	"github.com/xmplusdev/xmbox/helper/counter"
 
-	"github.com/xmplusdev/xmbox/instance"
+	"github.com/xmplusdev/xmbox/core/instance"
 	"github.com/xmplusdev/xmbox/limiter"
 )
 

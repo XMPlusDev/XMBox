@@ -13,7 +13,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/xmplusdev/xmbox/api"
-	"github.com/xmplusdev/xmbox/counter"
+	"github.com/xmplusdev/xmbox/helper/counter"
 )
 
 // globalLimiter is the single Limiter instance shared across all nodes.

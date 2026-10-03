@@ -4,7 +4,7 @@ COPY . .
 ENV CGO_ENABLED=0
 RUN go mod tidy
 RUN go mod download
-RUN go build -v -o XMBox -tags "sing xray hysteria2 with_quic with_grpc with_utls with_gvisor" -trimpath -ldflags "-s -w -buildid=" .
+RUN go build -v -o XMBox -tags "sing with_quic with_grpc with_utls with_gvisor" -trimpath -ldflags "-s -w -buildid=" .
 
 FROM alpine
 RUN apk --update --no-cache add tzdata ca-certificates \

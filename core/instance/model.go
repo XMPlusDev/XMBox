@@ -2,7 +2,7 @@ package instance
 
 import (
 	"github.com/xmplusdev/xmbox/api"
-	"github.com/xmplusdev/xmbox/cert"
+	"github.com/xmplusdev/xmbox/helper/cert"
 	"github.com/xmplusdev/xmbox/limiter"
 )
 

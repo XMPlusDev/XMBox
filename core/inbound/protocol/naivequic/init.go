@@ -23,7 +23,7 @@ import (
 	"github.com/sagernet/sing/common/logger"
 	"github.com/sagernet/sing/common/ntp"
 
-	"github.com/xmplusdev/xmbox/inbound/protocol"
+	"github.com/xmplusdev/xmbox/core/inbound/protocol"
 )
 
 func init() {

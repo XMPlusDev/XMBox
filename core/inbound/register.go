@@ -2,7 +2,7 @@ package inbound
 
 import (
 	"github.com/sagernet/sing-box/adapter/inbound"
-	"github.com/xmplusdev/xmbox/inbound/protocol"
+	"github.com/xmplusdev/xmbox/core/inbound/protocol"
 )
 
 func RegisterAll(registry *inbound.Registry) {

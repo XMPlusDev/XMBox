@@ -1,8 +1,8 @@
 package node
 
 import (
-	"github.com/xmplusdev/xmbox/cert"
-	"github.com/xmplusdev/xmbox/instance"
+	"github.com/xmplusdev/xmbox/helper/cert"
+	"github.com/xmplusdev/xmbox/core/instance"
 )
 
 // Config holds node-level configuration used by the Manager and builder.

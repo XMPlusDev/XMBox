@@ -16,10 +16,10 @@ import (
 	"github.com/sagernet/sing-tun"
 	N "github.com/sagernet/sing/common/network"
 
-	"github.com/xmplusdev/xmbox/counter"
+	"github.com/xmplusdev/xmbox/helper/counter"
 	"github.com/xmplusdev/xmbox/limiter"
-	"github.com/xmplusdev/xmbox/rate"
-	"github.com/xmplusdev/xmbox/rule"
+	"github.com/xmplusdev/xmbox/helper/rate"
+	"github.com/xmplusdev/xmbox/helper/rule"
 )
 
 var _ adapter.ConnectionTracker = (*Dispatcher)(nil)

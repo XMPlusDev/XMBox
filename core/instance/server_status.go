@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/xmplusdev/xmbox/api"
-	"github.com/xmplusdev/xmbox/monitor"
-	"github.com/xmplusdev/xmbox/scheduler"
+	"github.com/xmplusdev/xmbox/helper/monitor"
+	"github.com/xmplusdev/xmbox/helper/scheduler"
 )
 
 const serverStatusReportInterval = 5 * time.Second

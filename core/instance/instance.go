@@ -16,10 +16,10 @@ import (
 	"github.com/sagernet/sing-box/option"
 
 	"github.com/xmplusdev/xmbox/api"
-	"github.com/xmplusdev/xmbox/dispatcher"
-	"github.com/xmplusdev/xmbox/inbound"
+	"github.com/xmplusdev/xmbox/core/dispatcher"
+	"github.com/xmplusdev/xmbox/core/inbound"
 	"github.com/xmplusdev/xmbox/limiter"
-	"github.com/xmplusdev/xmbox/scheduler"
+	"github.com/xmplusdev/xmbox/helper/scheduler"
 	"github.com/xmplusdev/xmbox/service"
 )
 

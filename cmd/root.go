@@ -19,7 +19,7 @@ import (
 	"github.com/spf13/viper"
 
 	_ "github.com/xmplusdev/xmbox/controller"
-	"github.com/xmplusdev/xmbox/instance"
+	"github.com/xmplusdev/xmbox/core/instance"
 )
 
 var errReload = errors.New("reload")

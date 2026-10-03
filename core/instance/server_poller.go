@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/xmplusdev/xmbox/api"
-	"github.com/xmplusdev/xmbox/scheduler"
+	"github.com/xmplusdev/xmbox/helper/scheduler"
 	"github.com/xmplusdev/xmbox/service"
 )
 

@@ -15,7 +15,7 @@ import (
 	F "github.com/sagernet/sing/common/format"
 
 	"github.com/xmplusdev/xmbox/api"
-	"github.com/xmplusdev/xmbox/instance"
+	"github.com/xmplusdev/xmbox/core/instance"
 )
 
 // Manager creates and removes sing-box inbounds, outbounds, and per-subscription
