@@ -28,7 +28,7 @@ require (
 	github.com/sagernet/quic-go v0.61.0-sing-box-mod.9
 	github.com/sagernet/sing-anytls v0.0.0-20260928104022-580984e4d8cb
 	github.com/sagernet/sing-quic v0.7.1-0.20260924092235-4f371c86a365
-	github.com/sagernet/sing-shadowsocks v0.2.9-0.20260929204512-65740e0f0e3e
+	github.com/sagernet/sing-shadowsocks v0.2.9
 	github.com/sagernet/sing-shadowtls v0.2.2-0.20260928201441-a9c0127d5c99
 	github.com/sagernet/sing-tun v0.9.7-0.20261002083955-3f8acd9da65b
 	github.com/sagernet/sing-vmess v0.2.9-0.20260929152519-9b95ab8c9478
