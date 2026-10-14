@@ -510,7 +510,7 @@ if [[ $# > 0 ]]; then
         ;;
 		"x25519") check_install 0 && show_XMBox_x25519 0
         ;;
-		"ech") check_install && show_XMBox_ech 0
+		"ech") check_install 0 && show_XMBox_ech 0
         ;;
         *) show_usage
     esac
