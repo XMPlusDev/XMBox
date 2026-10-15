@@ -124,21 +124,31 @@ func newVMessInbound(
 	return h, nil
 }
 
-func (h *VMessInbound) Start(stage adapter.StartStage) error {
+func (h *VMessInbound) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	if stage != adapter.StartStateStart {
 		return nil
 	}
-	if err := h.service.Start(); err != nil {
+	err := h.service.Start()
+	if err != nil {
 		return err
 	}
+	scope.Add(h.service.Close)
 	if h.tlsConfig != nil {
 		if err := h.tlsConfig.Start(); err != nil {
 			return err
 		}
+		scope.Add(h.tlsConfig.Close)
 	}
 	if h.transport == nil {
-		return h.listener.Start()
+		err = h.listener.Start()
+		if err != nil {
+			return err
+		}
+		scope.Add(h.listener.Close)
+		return nil
 	}
+	scope.Add(h.transport.Close)
+	scope.Add(h.listener.Close)
 	if common.Contains(h.transport.Network(), N.NetworkTCP) {
 		tcpListener, err := h.listener.ListenTCP()
 		if err != nil {
@@ -164,9 +174,9 @@ func (h *VMessInbound) Start(stage adapter.StartStage) error {
 	return nil
 }
 
-func (h *VMessInbound) Close() error {
-	return common.Close(h.service, h.listener, h.tlsConfig, h.transport)
-}
+//func (h *VMessInbound) Close() error {
+//	return common.Close(h.service, h.listener, h.tlsConfig, h.transport)
+//}
 
 func (h *VMessInbound) AddUsers(users []option.VMessUser) error {
 	h.mu.Lock()

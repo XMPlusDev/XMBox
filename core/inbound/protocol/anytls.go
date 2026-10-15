@@ -97,7 +97,7 @@ func newAnyTLSInbound(
 	return h, nil
 }
 
-func (h *AnyTLSInbound) Start(stage adapter.StartStage) error {
+func (h *AnyTLSInbound) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	if stage != adapter.StartStateStart {
 		return nil
 	}
@@ -105,13 +105,19 @@ func (h *AnyTLSInbound) Start(stage adapter.StartStage) error {
 		if err := h.tlsConfig.Start(); err != nil {
 			return err
 		}
+		scope.Add(h.tlsConfig.Close)
 	}
-	return h.listener.Start()
+	err := h.listener.Start()
+	if err != nil {
+		return err
+	}
+	scope.Add(h.listener.Close)
+	return nil
 }
 
-func (h *AnyTLSInbound) Close() error {
-	return common.Close(h.listener, h.tlsConfig)
-}
+//func (h *AnyTLSInbound) Close() error {
+//	return common.Close(h.listener, h.tlsConfig)
+//}
 
 func (h *AnyTLSInbound) AddUsers(users []option.AnyTLSUser) error {
 	h.mu.Lock()

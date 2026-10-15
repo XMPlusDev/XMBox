@@ -52,7 +52,6 @@ func newTUICInbound(
 	tag string,
 	options option.TUICInboundOptions,
 ) (adapter.Inbound, error) {
-	options.UDPFragmentDefault = true
 	if options.TLS == nil || !options.TLS.Enabled {
 		return nil, C.ErrTLSRequired
 	}
@@ -119,7 +118,7 @@ func newTUICInbound(
 	return h, nil
 }
 
-func (h *TUICInbound) Start(stage adapter.StartStage) error {
+func (h *TUICInbound) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	if stage != adapter.StartStateStart {
 		return nil
 	}
@@ -127,17 +126,24 @@ func (h *TUICInbound) Start(stage adapter.StartStage) error {
 		if err := h.tlsConfig.Start(); err != nil {
 			return err
 		}
+		scope.Add(h.tlsConfig.Close)
 	}
 	packetConn, err := h.listener.ListenUDP()
 	if err != nil {
 		return err
 	}
-	return h.server.Start(packetConn)
+	scope.Add(h.listener.Close)
+	err = h.server.Start(packetConn)
+	if err != nil {
+		return err
+	}
+	scope.Add(h.server.Close)
+	return nil
 }
 
-func (h *TUICInbound) Close() error {
-	return common.Close(h.listener, h.tlsConfig, common.PtrOrNil(h.server))
-}
+//func (h *TUICInbound) Close() error {
+//	return common.Close(h.listener, h.tlsConfig, common.PtrOrNil(h.server))
+//}
 
 // ─── hot user management ─────────────────────────────────────────────────────
 

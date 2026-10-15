@@ -140,16 +140,21 @@ func newShadowsocksInbound(
 
 // ─── lifecycle ────────────────────────────────────────────────────────────────
 
-func (h *ShadowsocksInbound) Start(stage adapter.StartStage) error {
+func (h *ShadowsocksInbound) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	if stage != adapter.StartStateStart {
 		return nil
 	}
-	return h.listener.Start()
+	err := h.listener.Start()
+	if err != nil {
+		return err
+	}
+	scope.Add(h.listener.Close)
+	return nil
 }
 
-func (h *ShadowsocksInbound) Close() error {
-	return h.listener.Close()
-}
+//func (h *ShadowsocksInbound) Close() error {
+//	return h.listener.Close()
+//}
 
 // ─── ManagedSSMServer ────────────────────────────────────────────────────────
 

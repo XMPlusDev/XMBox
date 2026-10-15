@@ -11,7 +11,7 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/redis/go-redis/v9 v9.23.0
 	github.com/sagernet/sing v0.9.7-0.20260929150544-6f21f2425a95
-	github.com/sagernet/sing-box v1.15.0-alpha.10
+	github.com/sagernet/sing-box v1.14.4-0.20261013140250-dfb80349bf57
 	github.com/shirou/gopsutil/v4 v4.26.9
 	github.com/sirupsen/logrus v1.10.2
 	github.com/spf13/cobra v1.10.2
@@ -30,7 +30,7 @@ require (
 	github.com/sagernet/sing-quic v0.7.2-0.20261002084117-75c3ac4fa12b
 	github.com/sagernet/sing-shadowsocks v0.2.9-0.20260929204512-65740e0f0e3e
 	github.com/sagernet/sing-shadowtls v0.2.2-0.20260928201441-a9c0127d5c99
-	github.com/sagernet/sing-tun v0.9.7-0.20261002083955-3f8acd9da65b
+	github.com/sagernet/sing-tun v0.9.7-0.20261013140216-9ffa5391a2ad
 	github.com/sagernet/sing-vmess v0.2.9-0.20260929152519-9b95ab8c9478
 )
 

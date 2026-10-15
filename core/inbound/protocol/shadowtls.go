@@ -148,16 +148,21 @@ func (h *ShadowTLSInbound) References() []string {
 	return h.references
 }
 
-func (h *ShadowTLSInbound) Start(stage adapter.StartStage) error {
+func (h *ShadowTLSInbound) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	if stage != adapter.StartStateStart {
 		return nil
 	}
-	return h.listener.Start()
+	err := h.listener.Start()
+	if err != nil {
+		return err
+	}
+	scope.Add(h.listener.Close)
+	return nil
 }
 
-func (h *ShadowTLSInbound) Close() error {
-	return h.listener.Close()
-}
+//func (h *ShadowTLSInbound) Close() error {
+//	return h.listener.Close()
+//}
 
 // ─── hot user management ─────────────────────────────────────────────────────
 

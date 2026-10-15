@@ -60,7 +60,7 @@ type NaiveInbound struct {
 	networkIsDefault bool
 	tlsConfig        tls.ServerConfig
 	httpServer       *http.Server
-	h3Server         io.Closer
+	//h3Server         io.Closer
 
 	mu       sync.Mutex
 	users    []auth.User
@@ -111,7 +111,7 @@ func newNaiveInbound(
 
 // ─── lifecycle ────────────────────────────────────────────────────────────────
 
-func (h *NaiveInbound) Start(stage adapter.StartStage) error {
+func (h *NaiveInbound) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	if stage != adapter.StartStateStart {
 		return nil
 	}
@@ -119,7 +119,9 @@ func (h *NaiveInbound) Start(stage adapter.StartStage) error {
 		if err := h.tlsConfig.Start(); err != nil {
 			return E.Cause(err, "create TLS config")
 		}
+		scope.Add(h.tlsConfig.Close)
 	}
+	scope.Add(h.listener.Close)
 	if common.Contains(h.network, N.NetworkTCP) {
 		tcpListener, err := h.listener.ListenTCP()
 		if err != nil {
@@ -146,13 +148,15 @@ func (h *NaiveInbound) Start(stage adapter.StartStage) error {
 				h.logger.Error("http server serve error: ", sErr)
 			}
 		}()
+		scope.Add(h.httpServer.Close)
 	}
 
 	if common.Contains(h.network, N.NetworkUDP) {
 		if NaiveConfigureHTTP3ListenerFunc != nil {
 			h3Server, err := NaiveConfigureHTTP3ListenerFunc(h.ctx, h.logger, h.listener, h, h.tlsConfig, h.options)
 			if err == nil {
-				h.h3Server = h3Server
+				//h.h3Server = h3Server
+				scope.Add(h3Server.Close)
 			} else if len(h.network) > 1 {
 				h.logger.Warn(E.Cause(err, "naive http3 disabled"))
 			} else {
@@ -164,9 +168,9 @@ func (h *NaiveInbound) Start(stage adapter.StartStage) error {
 	return nil
 }
 
-func (h *NaiveInbound) Close() error {
-	return common.Close(h.listener, common.PtrOrNil(h.httpServer), h.h3Server, h.tlsConfig)
-}
+//func (h *NaiveInbound) Close() error {
+//	return common.Close(h.listener, common.PtrOrNil(h.httpServer), h.h3Server, h.tlsConfig)
+//}
 
 // ─── hot user management ─────────────────────────────────────────────────────
 

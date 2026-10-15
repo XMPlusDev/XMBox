@@ -58,7 +58,6 @@ func newHysteria2Inbound(
 	tag string,
 	options option.Hysteria2InboundOptions,
 ) (adapter.Inbound, error) {
-	options.UDPFragmentDefault = true
 	if options.TLS == nil || !options.TLS.Enabled {
 		return nil, C.ErrTLSRequired
 	}
@@ -245,7 +244,7 @@ func newHysteria2Inbound(
 	return h, nil
 }
 
-func (h *Hysteria2Inbound) Start(stage adapter.StartStage) error {
+func (h *Hysteria2Inbound) Start(stage adapter.StartStage, scope *adapter.Scope) error {
 	if stage != adapter.StartStateStart {
 		return nil
 	}
@@ -253,17 +252,24 @@ func (h *Hysteria2Inbound) Start(stage adapter.StartStage) error {
 		if err := h.tlsConfig.Start(); err != nil {
 			return err
 		}
+		scope.Add(h.tlsConfig.Close)
 	}
 	packetConn, err := h.listener.ListenUDP()
 	if err != nil {
 		return err
 	}
-	return h.service.Start(packetConn)
+	scope.Add(h.listener.Close)
+	err = h.service.Start(packetConn)
+	if err != nil {
+		return err
+	}
+	scope.Add(h.service.Close)
+	return nil
 }
 
-func (h *Hysteria2Inbound) Close() error {
-	return common.Close(h.listener, h.tlsConfig, common.PtrOrNil(h.service))
-}
+//func (h *Hysteria2Inbound) Close() error {
+//	return common.Close(h.listener, h.tlsConfig, common.PtrOrNil(h.service))
+//}
 
 func (h *Hysteria2Inbound) AddUsers(users []option.Hysteria2User) error {
 	h.mu.Lock()
