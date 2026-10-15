@@ -180,6 +180,23 @@ type TlsSettings struct {
 	EnabledECH     bool
 	ECHKey         []string
 
+	// ClientAuthentication selects the TLS client-authentication mode
+	// (option.ClientAuthType strings: "no", "request", "require-any",
+	// "verify-if-given", "require-and-verify"). Empty means sing-box's
+	// default ("no"), which disables client verification even when pins
+	// below are set.
+	ClientAuthentication string
+	// ClientCertificateSHA256 and ClientCertificatePublicKeySHA256 pin
+	// accepted client certificates by SHA-256 hash, in base64 format (see
+	// sing-box InboundTLSOptions). Only applies to plain TLS, never Reality.
+	ClientCertificateSHA256          []string
+	ClientCertificatePublicKeySHA256 []string
+	// CertificateSHA256 and CertificatePublicKeySHA256 pin the server
+	// certificate a relay dials, in base64 format (see sing-box
+	// OutboundTLSOptions). Only applies to plain TLS, never Reality.
+	CertificateSHA256          []string
+	CertificatePublicKeySHA256 []string
+
 	RealityEnabled    bool
 	RealityPrivateKey string
 	RealityShortID    []string

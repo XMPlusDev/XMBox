@@ -404,6 +404,23 @@ func (c *Client) parseSecuritySettings(securityData *simplejson.Json, nodeInfo *
 		nodeInfo.TlsSettings.Alpn = alpn
 	}
 
+	// Mutual TLS: SHA-256 pins of accepted client certificates / public keys.
+	if v, err := tlsNode.Get("client_authentication").String(); err == nil {
+		nodeInfo.TlsSettings.ClientAuthentication = v
+	}
+	if hashes, err := tlsNode.Get("client_certificate_sha256").StringArray(); err == nil {
+		nodeInfo.TlsSettings.ClientCertificateSHA256 = hashes
+	}
+	if hashes, err := tlsNode.Get("client_certificate_public_key_sha256").StringArray(); err == nil {
+		nodeInfo.TlsSettings.ClientCertificatePublicKeySHA256 = hashes
+	}
+	if hashes, err := tlsNode.Get("certificate_sha256").StringArray(); err == nil {
+		nodeInfo.TlsSettings.CertificateSHA256 = hashes
+	}
+	if hashes, err := tlsNode.Get("certificate_public_key_sha256").StringArray(); err == nil {
+		nodeInfo.TlsSettings.CertificatePublicKeySHA256 = hashes
+	}
+
 	// ECH
 	if ech, ok := tlsNode.CheckGet("ech"); ok {
 		if v, ok := ech.CheckGet("enabled"); ok {

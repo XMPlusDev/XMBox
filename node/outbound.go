@@ -134,7 +134,7 @@ func OutboundRelayBuilder(relayNodeInfo *api.RelayNodeInfo, tag string, subscrip
 					RealmID:   ns.RealmID,
 				}
 				if len(ns.RealmSTUNServers) > 0 {
-					realm.STUNServers = badoption.Listable[string](ns.RealmSTUNServers)
+					realm.STUNServers = option.LegacyListable[string](ns.RealmSTUNServers)
 				}
 			}
 		}
@@ -316,6 +316,27 @@ func buildRelayTLS(relayNodeInfo *api.RelayNodeInfo) (option.OutboundTLSOptionsC
 		Insecure:   true,
 		ServerName: ts.ServerName,
 		ALPN:       badoption.Listable[string](ts.Alpn),
+	}
+
+	// Server-certificate pins only apply to plain TLS: Reality runs its own
+	// verifier off the public key (see common/tls reality_client.go), so
+	// pins are ignored there — matching how the server side refuses
+	// ClientCertificatePublicKeySHA256 for Reality.
+	if ts.Type != "reality" {
+		if len(ts.CertificateSHA256) > 0 {
+			hashes, err := decodeSHA256Pins(ts.CertificateSHA256)
+			if err != nil {
+				return option.OutboundTLSOptionsContainer{}, fmt.Errorf("invalid certificate_sha256: %w", err)
+			}
+			tls.CertificateSHA256 = hashes
+		}
+		if len(ts.CertificatePublicKeySHA256) > 0 {
+			hashes, err := decodeSHA256Pins(ts.CertificatePublicKeySHA256)
+			if err != nil {
+				return option.OutboundTLSOptionsContainer{}, fmt.Errorf("invalid certificate_public_key_sha256: %w", err)
+			}
+			tls.CertificatePublicKeySHA256 = hashes
+		}
 	}
 
 	if ts.Type == "reality" && ts.RealityEnabled {

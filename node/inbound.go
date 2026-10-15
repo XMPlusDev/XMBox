@@ -1,6 +1,9 @@
 package node
 
 import (
+	"crypto/sha256"
+	"crypto/tls"
+	"encoding/base64"
 	"fmt"
 	"log"
 	"net/netip"
@@ -73,6 +76,27 @@ func getInboundOptions(tag string, nodeInfo *api.NodeInfo, config *Config) ([]op
 		case "tls":
 			tls.Enabled = nodeInfo.TlsSettings.Enabled
 			tls.ALPN = badoption.Listable[string](nodeInfo.TlsSettings.Alpn)
+			if nodeInfo.TlsSettings.ClientAuthentication != "" {
+				mode, err := parseClientAuthentication(nodeInfo.TlsSettings.ClientAuthentication)
+				if err != nil {
+					return nil, err
+				}
+				tls.ClientAuthentication = mode
+			}
+			if len(nodeInfo.TlsSettings.ClientCertificateSHA256) > 0 {
+				hashes, err := decodeSHA256Pins(nodeInfo.TlsSettings.ClientCertificateSHA256)
+				if err != nil {
+					return nil, fmt.Errorf("invalid client_certificate_sha256: %w", err)
+				}
+				tls.ClientCertificateSHA256 = hashes
+			}
+			if len(nodeInfo.TlsSettings.ClientCertificatePublicKeySHA256) > 0 {
+				hashes, err := decodeSHA256Pins(nodeInfo.TlsSettings.ClientCertificatePublicKeySHA256)
+				if err != nil {
+					return nil, fmt.Errorf("invalid client_certificate_public_key_sha256: %w", err)
+				}
+				tls.ClientCertificatePublicKeySHA256 = hashes
+			}
 			if config.CertConfig != nil && nodeInfo.TlsSettings.CertMode != "none" {
 				certFile, keyFile, err := getCertFile(config.CertConfig, nodeInfo.TlsSettings)
 				if err != nil {
@@ -187,7 +211,7 @@ func getInboundOptions(tag string, nodeInfo *api.NodeInfo, config *Config) ([]op
 				},
 			}
 			if len(nodeInfo.NetworkSettings.RealmSTUNServers) > 0 {
-				realm.STUNServers = badoption.Listable[string](nodeInfo.NetworkSettings.RealmSTUNServers)
+				realm.STUNServers = option.LegacyListable[string](nodeInfo.NetworkSettings.RealmSTUNServers)
 			}
 		}
 		in.Type = "hysteria2"
@@ -429,6 +453,46 @@ func getCertFile(certConfig *cert.CertConfig, tlsSettings *api.TlsSettings) (cer
 		return lego.HTTPCert(tlsSettings.CertMode, tlsSettings.CertDomainName, tlsSettings.CertEmail)
 	default:
 		return "", "", fmt.Errorf("unsupported certmode: %s", tlsSettings.CertMode)
+	}
+}
+
+// decodeSHA256Pins decodes a list of base64 SHA-256 hashes (the format
+// sing-box documents for client_certificate_sha256 and
+// client_certificate_public_key_sha256) into badoption.Listable[[]byte].
+func decodeSHA256Pins(pins []string) (badoption.Listable[[]byte], error) {
+	hashes := make(badoption.Listable[[]byte], 0, len(pins))
+	for _, pin := range pins {
+		raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(pin))
+		if err != nil {
+			return nil, fmt.Errorf("decode pin %q: %w", pin, err)
+		}
+		if len(raw) != sha256.Size {
+			return nil, fmt.Errorf("pin %q decodes to %d bytes, want %d", pin, len(raw), sha256.Size)
+		}
+		hashes = append(hashes, raw)
+	}
+	return hashes, nil
+}
+
+// parseClientAuthentication maps the panel's client_authentication string
+// onto sing-box's ClientAuthType ("no", "request", "require-any",
+// "verify-if-given", "require-and-verify"). The ordering matches crypto/tls
+// (NoClientCert, RequestClientCert, RequireAnyClientCert,
+// VerifyClientCertIfGiven, RequireAndVerifyClientCert).
+func parseClientAuthentication(value string) (option.ClientAuthType, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "no":
+		return option.ClientAuthType(tls.NoClientCert), nil
+	case "request":
+		return option.ClientAuthType(tls.RequestClientCert), nil
+	case "require-any":
+		return option.ClientAuthType(tls.RequireAnyClientCert), nil
+	case "verify-if-given":
+		return option.ClientAuthType(tls.VerifyClientCertIfGiven), nil
+	case "require-and-verify":
+		return option.ClientAuthType(tls.RequireAndVerifyClientCert), nil
+	default:
+		return option.ClientAuthType(tls.NoClientCert), fmt.Errorf("unknown client_authentication %q: want no, request, require-any, verify-if-given, or require-and-verify", value)
 	}
 }
 
