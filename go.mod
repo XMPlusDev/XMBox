@@ -23,7 +23,7 @@ require (
 )
 
 require (
-	github.com/alicebob/miniredis/v2 v2.39.0
+	github.com/alicebob/miniredis/v2 v2.40.0
 	github.com/gofrs/uuid/v5 v5.5.1
 	github.com/sagernet/quic-go v0.61.0-sing-box-mod.9
 	github.com/sagernet/sing-anytls v0.0.0-20260928104022-580984e4d8cb
