@@ -11,7 +11,7 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/redis/go-redis/v9 v9.23.0
 	github.com/sagernet/sing v0.9.7-0.20260929150544-6f21f2425a95
-	github.com/sagernet/sing-box v1.14.4-0.20261013140250-dfb80349bf57
+	github.com/sagernet/sing-box v1.15.0-alpha.12
 	github.com/shirou/gopsutil/v4 v4.26.9
 	github.com/sirupsen/logrus v1.10.2
 	github.com/spf13/cobra v1.10.2
