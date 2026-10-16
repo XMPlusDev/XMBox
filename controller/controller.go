@@ -589,16 +589,14 @@ func (c *Controller) selfSignedCertMonitor() error {
 		return fmt.Errorf("self-signed cert save: %w", err)
 	}
 
-	// Push certificate hashes to panel via Reverb (node-scoped)
-	hashes, hErr := generatedCert.Hashes()
-	if hErr == nil {
-		if pusher := c.nodePusher(); pusher != nil {
-			if perr := pusher("cert_hashes", map[string]any{
+	if pusher := c.nodePusher(); pusher != nil {
+		hashes, hErr := generatedCert.Hashes()
+		if hErr == nil {
+			_ = pusher("cert_hashes", map[string]any{
+				"core":           "singbox",
 				"certificate_sha256":           hashes.CertificateB64,
 				"certificate_public_key_sha256": hashes.PublicKeyB64,
-			}); perr != nil {
-				log.Printf("%s failed to push cert hashes via Reverb: %v", c.LogPrefix, perr)
-			}
+			})
 		}
 	}
 	return nil

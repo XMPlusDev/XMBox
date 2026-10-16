@@ -472,6 +472,7 @@ func getCertFile(certConfig *cert.CertConfig, tlsSettings *api.TlsSettings, push
 			hashes, hErr := generatedCert.Hashes()
 			if hErr == nil {
 				_ = pusher("cert_hashes", map[string]any{
+					"core":           "singbox",
 					"certificate_sha256":          hashes.CertificateB64,
 					"certificate_public_key_sha256": hashes.PublicKeyB64,
 				})
