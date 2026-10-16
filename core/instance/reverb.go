@@ -156,10 +156,21 @@ func (i *Instance) runReverbSession(ctx context.Context, conn *websocket.Conn, c
 		return fmt.Errorf("await connected: %w", err)
 	}
 
-	subData := map[string]string{"channel": reverbChannel}
-	if cfg.AppSecret != "" {
-		subData["auth"] = signChannel(cfg.AppKey, cfg.AppSecret, socketID, reverbChannel)
+	subData := map[string]any{"channel": reverbChannel}
+	var serverID int
+	var apiKey string
+	if i.instanceConfig.ApiConfig != nil {
+		serverID = i.instanceConfig.ApiConfig.ServerID
+		apiKey = i.instanceConfig.ApiConfig.APIKey
 	}
+	
+	if cfg.AppSecret != "" {
+		subData["auth"] = signChannel(cfg.AppKey, cfg.AppSecret, socketID, reverbChannel, serverID, apiKey)
+	}
+	if i.instanceConfig.ApiConfig != nil {
+		subData["server_id"] = i.instanceConfig.ApiConfig.ServerID
+	}
+	
 	sub, _ := json.Marshal(pusherMessage{
 		Event: "pusher:subscribe",
 		Data:  mustMarshal(subData),
@@ -318,8 +329,10 @@ func minDuration(a, b time.Duration) time.Duration {
 	return b
 }
 
-func signChannel(appKey, appSecret, socketID, channel string) string {
-	mac := hmac.New(sha256.New, []byte(appSecret))
-	mac.Write([]byte(socketID + ":" + channel))
-	return appKey + ":" + hex.EncodeToString(mac.Sum(nil))
+func signChannel(appKey, appSecret, socketID, channel string, serverID int, apiKey string) string {
+	stringToSign := fmt.Sprintf("%s:%s:%d:%s", socketID, channel, serverID)
+	mac := hmac.New(sha256.New, []byte(appSecret + apiKey))
+	mac.Write([]byte(stringToSign))
+	sig := hex.EncodeToString(mac.Sum(nil))
+	return appKey + ":" + sig
 }
