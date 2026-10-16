@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/base64"
+	"regexp"
 	"fmt"
 	"log"
 	"net/netip"
@@ -18,6 +19,7 @@ import (
 	"github.com/xmplusdev/xmbox/helper/cert"
 )
 
+var safeCertName = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$`)
 // ShadowTLSTag returns the tag of the ShadowTLS listener fronting a node.
 //
 // The node tag stays on the protocol inbound behind it, so traffic accounting,
@@ -454,9 +456,16 @@ func getCertFile(certConfig *cert.CertConfig, tlsSettings *api.TlsSettings, push
 		}
 		return lego.HTTPCert(tlsSettings.CertMode, tlsSettings.CertDomainName, tlsSettings.CertEmail)
 	case "self-signed":
+		if !safeCertName.MatchString(tlsSettings.ServerName) {
+			return "", "", fmt.Errorf("invalid server name %q for self-signed certificate", tlsSettings.ServerName)
+		}
 		pathBase := filepath.Join("/etc/XMBox", tlsSettings.ServerName)
+		domain := tlsSettings.CertDomainName
+		if domain == "" {
+			domain = tlsSettings.ServerName
+		}
 		generatedCert, err := cert.GenerateTLSCert(cert.CertOptions{
-			Domains:      []string{tlsSettings.CertDomainName},
+			Domains:      []string{domain},
 			CommonName:   tlsSettings.ServerName,
 			Organization: "XMPlus",
 			IsCA:         false,
@@ -471,11 +480,13 @@ func getCertFile(certConfig *cert.CertConfig, tlsSettings *api.TlsSettings, push
 		if pusher != nil {
 			hashes, hErr := generatedCert.Hashes()
 			if hErr == nil {
-				_ = pusher("cert_hashes", map[string]any{
-					"core":           "singbox",
-					"certificate_sha256":          hashes.CertificateB64,
+				if pErr := pusher("cert_hashes", map[string]any{
+					"core":                          "singbox",
+					"certificate_sha256":            hashes.CertificateB64,
 					"certificate_public_key_sha256": hashes.PublicKeyB64,
-				})
+				}); pErr != nil {
+					log.Printf("cert_hashes push failed: %v", pErr)
+				}
 			}			
 		}
 		return pathBase + ".crt", pathBase + ".key", nil

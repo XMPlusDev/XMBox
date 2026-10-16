@@ -299,6 +299,14 @@ func (i *Instance) GetCtx() context.Context             { return i.ctx }
 func (i *Instance) GetLogFactory() boxLog.Factory       { return i.logFactory }
 func (i *Instance) GetDispatcher() *dispatcher.Dispatcher { return i.dispatcher }
 
+
+func (i *Instance) GetServerID() int {
+	if i.instanceConfig == nil || i.instanceConfig.ApiConfig == nil {
+		return 0
+	}
+	return i.instanceConfig.ApiConfig.ServerID
+}
+
 func (i *Instance) GetInbound(tag string) (adapter.Inbound, bool) {
 	return i.server.Inbound().Get(tag)
 }

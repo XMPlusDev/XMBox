@@ -6,6 +6,7 @@ import (
 	"log"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"time"
 
 	"github.com/xmplusdev/xmbox/api"
@@ -36,6 +37,8 @@ func init() {
 }
 
 var _ service.ControllerInterface = (*Controller)(nil)
+
+var safeCertName = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$`)
 
 // Controller manages one node: fetching config, managing subscriptions, reporting traffic.
 type Controller struct {
@@ -98,8 +101,9 @@ func (c *Controller) nodePusher() func(string, any) error {
 	push := c.pusher
 	return func(event string, data any) error {
 		return push(event, map[string]any{
-			"node_id": nodeID,
-			"data":    data,
+			"node_id":  nodeID,
+			"server_id": c.coreInstance.GetServerID(),
+			"data":     data,
 		})
 	}
 }
@@ -573,12 +577,18 @@ func (c *Controller) selfSignedCertMonitor() error {
 	if c.nodeInfo.TlsSettings.CertMode != "self-signed" {
 		return nil
 	}
-
+	if !safeCertName.MatchString(c.nodeInfo.TlsSettings.ServerName) {
+		return nil
+	}
 	pathBase := filepath.Join("/etc/XMBox", c.nodeInfo.TlsSettings.ServerName)
+	domain := c.nodeInfo.TlsSettings.CertDomainName
+	if domain == "" {
+		domain = c.nodeInfo.TlsSettings.ServerName
+	}
 	generatedCert, err := cert.GenerateTLSCert(cert.CertOptions{
-		Domains:      []string{c.nodeInfo.TlsSettings.CertDomainName},
+		Domains:      []string{domain},
 		CommonName:   c.nodeInfo.TlsSettings.ServerName,
-		Organization: "XMBox",
+		Organization: "XMPlus",
 		IsCA:         false,
 		Expire:       3600 * 24 * time.Hour,
 	})
@@ -592,11 +602,13 @@ func (c *Controller) selfSignedCertMonitor() error {
 	if pusher := c.nodePusher(); pusher != nil {
 		hashes, hErr := generatedCert.Hashes()
 		if hErr == nil {
-			_ = pusher("cert_hashes", map[string]any{
-				"core":           "singbox",
-				"certificate_sha256":           hashes.CertificateB64,
+			if pErr := pusher("cert_hashes", map[string]any{
+				"core":                          "singbox",
+				"certificate_sha256":            hashes.CertificateB64,
 				"certificate_public_key_sha256": hashes.PublicKeyB64,
-			})
+			}); pErr != nil {
+				log.Printf("cert_hashes push failed: %v", pErr)
+			}
 		}
 	}
 	return nil
