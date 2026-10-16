@@ -53,8 +53,8 @@ func NewManager(coreInstance *instance.Instance) *Manager {
 // sing-box, and starts them in every lifecycle stage. A node is usually one
 // inbound, but a ShadowTLS-fronted node is a chain: the protocol on loopback
 // plus the ShadowTLS listener that detours into it.
-func (m *Manager) AddNode(nodeInfo *api.NodeInfo, tag string, config *Config) error {
-	inbounds, err := getInboundOptions(tag, nodeInfo, config)
+func (m *Manager) AddNode(nodeInfo *api.NodeInfo, tag string, config *Config, pusher func(string, any) error) error {
+	inbounds, err := getInboundOptions(tag, nodeInfo, config, pusher)
 	if err != nil {
 		return fmt.Errorf("build inbound config: %w", err)
 	}

@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"log"
 	"net/netip"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common/json/badoption"
@@ -29,7 +31,7 @@ import (
 // by a ShadowTLS listener on the public port that detours into it. ShadowTLS
 // carries no destination and no encryption of its own, so the protocol behind
 // it is what actually moves traffic.
-func getInboundOptions(tag string, nodeInfo *api.NodeInfo, config *Config) ([]option.Inbound, error) {
+func getInboundOptions(tag string, nodeInfo *api.NodeInfo, config *Config, pusher func(string, any) error) ([]option.Inbound, error) {
 	addr, err := netip.ParseAddr(nodeInfo.ListenAddr)
 	if err != nil {
 		return nil, fmt.Errorf("invalid listen IP %q: %w", nodeInfo.ListenAddr, err)
@@ -98,7 +100,7 @@ func getInboundOptions(tag string, nodeInfo *api.NodeInfo, config *Config) ([]op
 				tls.ClientCertificatePublicKeySHA256 = hashes
 			}
 			if config.CertConfig != nil && nodeInfo.TlsSettings.CertMode != "none" {
-				certFile, keyFile, err := getCertFile(config.CertConfig, nodeInfo.TlsSettings)
+				certFile, keyFile, err := getCertFile(config.CertConfig, nodeInfo.TlsSettings, pusher)
 				if err != nil {
 					return nil, err
 				}
@@ -414,7 +416,7 @@ func buildTransport(nodeInfo *api.NodeInfo, fronted bool) (*option.V2RayTranspor
 	return t, nil
 }
 
-func getCertFile(certConfig *cert.CertConfig, tlsSettings *api.TlsSettings) (certFile string, keyFile string, err error) {
+func getCertFile(certConfig *cert.CertConfig, tlsSettings *api.TlsSettings, pusher func(string, any) error) (certFile string, keyFile string, err error) {
 	if certConfig == nil {
 		return "", "", fmt.Errorf("certConfig is nil")
 	}
@@ -451,6 +453,31 @@ func getCertFile(certConfig *cert.CertConfig, tlsSettings *api.TlsSettings) (cer
 			return "", "", err
 		}
 		return lego.HTTPCert(tlsSettings.CertMode, tlsSettings.CertDomainName, tlsSettings.CertEmail)
+	case "self-signed":
+		pathBase := filepath.Join("/etc/XMBox", tlsSettings.ServerName)
+		generatedCert, err := cert.GenerateTLSCert(cert.CertOptions{
+			Domains:      []string{tlsSettings.CertDomainName},
+			CommonName:   tlsSettings.ServerName,
+			Organization: "XMPlus",
+			IsCA:         false,
+			Expire:       3600 * 24 * time.Hour,
+		})
+		if err != nil {
+			return "", "", err
+		}
+		if err := generatedCert.Save(pathBase); err != nil {
+			return "", "", err
+		}
+		if pusher != nil {
+			hashes, hErr := generatedCert.Hashes()
+			if hErr == nil {
+				_ = pusher("cert_hashes", map[string]any{
+					"certificate_sha256":          hashes.CertificateB64,
+					"certificate_public_key_sha256": hashes.PublicKeyB64,
+				})
+			}			
+		}
+		return pathBase + ".crt", pathBase + ".key", nil
 	default:
 		return "", "", fmt.Errorf("unsupported certmode: %s", tlsSettings.CertMode)
 	}

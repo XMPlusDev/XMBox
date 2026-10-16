@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"path/filepath"
 	"reflect"
 	"time"
 
@@ -149,7 +150,7 @@ func (c *Controller) Start() error {
 	}
 	c.subscriptionList = subscriptions
 
-	if err := c.nodeManager.AddNode(c.nodeInfo, c.Tag, c.config); err != nil {
+	if err := c.nodeManager.AddNode(c.nodeInfo, c.Tag, c.config, c.nodePusher()); err != nil {
 		return fmt.Errorf("AddNode: %w", err)
 	}
 
@@ -184,6 +185,11 @@ func (c *Controller) Start() error {
 	if c.nodeInfo.TlsSettings != nil && c.nodeInfo.TlsSettings.Type == "tls" {
 		c.taskManager.Add(scheduler.NewWithDelay(c.LogPrefix, "cert_renew",
 			c.currentPollInterval*60, c.certMonitor))
+	}
+
+	if c.nodeInfo.TlsSettings != nil && c.nodeInfo.TlsSettings.CertMode == "self-signed" {
+		c.taskManager.Add(scheduler.NewWithDelay(c.LogPrefix, "cert_self_signed",
+			24*time.Hour, c.selfSignedCertMonitor))
 	}
 
 	go c.webhookTriggerLoop(c.currentPollInterval)
@@ -351,7 +357,7 @@ func (c *Controller) apiMonitor() error {
 		}
 		c.LogPrefix = c.logPrefix()
 
-		if err := c.nodeManager.AddNode(newNodeInfo, c.Tag, c.config); err != nil {
+		if err := c.nodeManager.AddNode(newNodeInfo, c.Tag, c.config, c.nodePusher()); err != nil {
 			log.Printf("%s AddNode error: %v", c.LogPrefix, err)
 			c.nodeInfo, c.Tag = oldNodeInfo, oldTag
 			return err
@@ -552,6 +558,47 @@ func (c *Controller) certMonitor() error {
 		}
 		if _, _, _, err := lego.RenewCert(c.nodeInfo.TlsSettings.CertMode, c.nodeInfo.TlsSettings.ServerName, c.nodeInfo.TlsSettings.CertEmail); err != nil {
 			log.Printf("%s cert renew failed: %v", c.LogPrefix, err)
+		}
+	}
+	return nil
+}
+
+// selfSignedCertMonitor generates a self-signed certificate and pushes its
+// hashes to the panel via Reverb. It runs as its own scheduled task rather
+// than being mixed into certMonitor's ACME/Lego flow.
+func (c *Controller) selfSignedCertMonitor() error {
+	if c.nodeInfo.TlsSettings == nil {
+		return nil
+	}
+	if c.nodeInfo.TlsSettings.CertMode != "self-signed" {
+		return nil
+	}
+
+	pathBase := filepath.Join("/etc/XMBox", c.nodeInfo.TlsSettings.ServerName)
+	generatedCert, err := cert.GenerateTLSCert(cert.CertOptions{
+		Domains:      []string{c.nodeInfo.TlsSettings.CertDomainName},
+		CommonName:   c.nodeInfo.TlsSettings.ServerName,
+		Organization: "XMBox",
+		IsCA:         false,
+		Expire:       3600 * 24 * time.Hour,
+	})
+	if err != nil {
+		return fmt.Errorf("self-signed cert generate: %w", err)
+	}
+	if err := generatedCert.Save(pathBase); err != nil {
+		return fmt.Errorf("self-signed cert save: %w", err)
+	}
+
+	// Push certificate hashes to panel via Reverb (node-scoped)
+	hashes, hErr := generatedCert.Hashes()
+	if hErr == nil {
+		if pusher := c.nodePusher(); pusher != nil {
+			if perr := pusher("cert_hashes", map[string]any{
+				"certificate_sha256":           hashes.CertificateB64,
+				"certificate_public_key_sha256": hashes.PublicKeyB64,
+			}); perr != nil {
+				log.Printf("%s failed to push cert hashes via Reverb: %v", c.LogPrefix, perr)
+			}
 		}
 	}
 	return nil
