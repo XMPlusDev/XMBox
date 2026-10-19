@@ -2,6 +2,8 @@ module github.com/xmplusdev/xmbox
 
 go 1.26.4
 
+toolchain go1.27.2
+
 require (
 	dario.cat/mergo v1.0.2
 	github.com/bitly/go-simplejson v0.5.1

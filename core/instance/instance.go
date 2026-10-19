@@ -39,6 +39,7 @@ type Instance struct {
 	dispatcher *dispatcher.Dispatcher
 	logFactory boxLog.Factory
 	Service    []service.ControllerInterface
+	panelType        string
 
 	reverbCancels  []context.CancelFunc
 	controllerMap  map[int]service.TriggerInterface
@@ -221,6 +222,8 @@ func (i *Instance) startServerMode(rootClient api.API) error {
 	if err != nil {
 		return fmt.Errorf("GetServerNodes: %w", err)
 	}
+	
+	i.panelType = resp.PanelType
 	
 	if resp.Version < 2606120 {
 		return fmt.Errorf("Backend does not support panel api version before v2606120. Update your panel.  Your panel api version is: %d", resp.Version)

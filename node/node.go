@@ -24,6 +24,8 @@ import (
 // relay routing rules for node configurations.
 type Manager struct {
 	coreInstance *instance.Instance
+	
+	client     api.API
 
 	relayMu    sync.Mutex
 	relayRules map[string]adapter.Rule
@@ -40,12 +42,13 @@ type Manager struct {
 }
 
 // NewManager returns a Manager backed by the given instance.
-func NewManager(coreInstance *instance.Instance) *Manager {
+func NewManager(coreInstance *instance.Instance, client api.API) *Manager {
 	return &Manager{
 		coreInstance:   coreInstance,
 		relayRules:     make(map[string]adapter.Rule),
 		inboundScopes:  make(map[string][]*adapter.Scope),
 		outboundScopes: make(map[string]*adapter.Scope),
+		client:     client,
 	}
 }
 
@@ -54,7 +57,7 @@ func NewManager(coreInstance *instance.Instance) *Manager {
 // inbound, but a ShadowTLS-fronted node is a chain: the protocol on loopback
 // plus the ShadowTLS listener that detours into it.
 func (m *Manager) AddNode(nodeInfo *api.NodeInfo, tag string, config *Config, pusher func(string, any) error) error {
-	inbounds, err := getInboundOptions(tag, nodeInfo, config, pusher)
+	inbounds, err := getInboundOptions(tag, nodeInfo, config, pusher, m.client)
 	if err != nil {
 		return fmt.Errorf("build inbound config: %w", err)
 	}

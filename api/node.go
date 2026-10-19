@@ -59,6 +59,20 @@ func (c *Client) ReportServerStatus(serverID int, status *ServerStatus) error {
 	return nil
 }
 
+func (c *Client) ReportCertHash(data *CertHash) error {
+	postData := &PostData{Key: c.APIKey, Data: data}
+	res, err := c.client.R().
+		SetBody(postData).
+		SetPathParam("nodeId", strconv.Itoa(c.NodeID)).
+		ForceContentType("application/json").
+		Post("/api/server/cert-hash/{nodeId}")
+
+	if _, checkErr := c.checkResponse(res, err); checkErr != nil {
+		return checkErr
+	}
+	return nil
+}
+
 // GetNodeInfo fetches and parses the configuration for c.NodeID.
 func (c *Client) GetNodeInfo() (*NodeInfo, error) {
 	server := new(serverConfig)

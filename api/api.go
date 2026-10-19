@@ -14,6 +14,7 @@ type API interface {
 	GetSubscriptionList() (*[]SubscriptionInfo, error)
 	ReportTraffic(*[]SubscriptionTraffic) error
 	ReportOnlineIPs(*[]OnlineIP) error
+	ReportCertHash(data *CertHash) (err error)
 
 	// Machine / server-ID endpoints (only used when ServerID > 0)
 	GetServerNodes() (*ServerNodesResponse, error)

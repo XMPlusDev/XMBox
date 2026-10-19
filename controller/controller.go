@@ -80,7 +80,7 @@ func New(coreInstance *instance.Instance, apiClient api.API, config *node.Config
 		config:                  config,
 		client:                  apiClient,
 		taskManager:             scheduler.NewManager(),
-		nodeManager:             node.NewManager(coreInstance),
+		nodeManager:             node.NewManager(coreInstance, apiClient),
 		subManager:              subscription.NewManager(coreInstance, apiClient),
 		nodeSyncTrigger:         make(chan struct{}, 1),
 		subscriptionSyncTrigger: make(chan struct{}, 1),
@@ -603,11 +603,21 @@ func (c *Controller) selfSignedCertMonitor() error {
 		hashes, hErr := generatedCert.Hashes()
 		if hErr == nil {
 			if pErr := pusher("cert_hashes", map[string]any{
-				"core":                          "singbox",
-				"certificate_sha256":            hashes.CertificateB64,
+				"core": "singbox",
+				"certificate_sha256": hashes.CertificateB64,
 				"certificate_public_key_sha256": hashes.PublicKeyB64,
 			}); pErr != nil {
 				log.Printf("cert_hashes push failed: %v", pErr)
+				if c.client != nil {
+					data := &api.CertHash{
+						Core: "singbox",
+						CertSha256: hashes.CertificateB64,
+						CertPublicKeySha256: hashes.PublicKeyB64,
+					}
+					if rErr := c.client.ReportCertHash(data); rErr != nil {
+						log.Printf("cert_hashes ReportCertHash failed: %v", rErr)
+					}
+				}
 			}
 		}
 	}

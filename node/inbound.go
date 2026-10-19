@@ -1,9 +1,11 @@
 package node
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/base64"
+	"encoding/pem"
 	"regexp"
 	"fmt"
 	"log"
@@ -33,7 +35,7 @@ var safeCertName = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$
 // by a ShadowTLS listener on the public port that detours into it. ShadowTLS
 // carries no destination and no encryption of its own, so the protocol behind
 // it is what actually moves traffic.
-func getInboundOptions(tag string, nodeInfo *api.NodeInfo, config *Config, pusher func(string, any) error) ([]option.Inbound, error) {
+func getInboundOptions(tag string, nodeInfo *api.NodeInfo, config *Config, pusher func(string, any) error, client api.API) ([]option.Inbound, error) {
 	addr, err := netip.ParseAddr(nodeInfo.ListenAddr)
 	if err != nil {
 		return nil, fmt.Errorf("invalid listen IP %q: %w", nodeInfo.ListenAddr, err)
@@ -102,17 +104,21 @@ func getInboundOptions(tag string, nodeInfo *api.NodeInfo, config *Config, pushe
 				tls.ClientCertificatePublicKeySHA256 = hashes
 			}
 			if config.CertConfig != nil && nodeInfo.TlsSettings.CertMode != "none" {
-				certFile, keyFile, err := getCertFile(config.CertConfig, nodeInfo.TlsSettings, pusher)
+				certFile, keyFile, err := getCertFile(config.CertConfig, nodeInfo.TlsSettings, pusher, client)
 				if err != nil {
 					return nil, err
 				}
 				tls.CertificatePath = certFile
 				tls.KeyPath = keyFile
 			}
-			if len(nodeInfo.TlsSettings.ECHKey) > 0 {
+			if nodeInfo.TlsSettings.EnabledECH {
+				lines, err := normalizeECHKeyLines(nodeInfo.TlsSettings.ECHKey)
+				if err != nil {
+					return nil, fmt.Errorf("invalid ECH key: %w", err)
+				}
 				tls.ECH = &option.InboundECHOptions{
-					Enabled: nodeInfo.TlsSettings.EnabledECH,
-					Key:     nodeInfo.TlsSettings.ECHKey,
+					Enabled: true,
+					Key:     badoption.Listable[string](lines),
 				}
 			}
 		case "reality":
@@ -313,6 +319,25 @@ func shadowTLSInbound(tag string, listen option.ListenOptions, settings *api.Sha
 	}, nil
 }
 
+// normalizeECHKeyLines trims the stored PEM lines and checks they form
+// exactly one "ECH KEYS" block. Error messages never include the key.
+func normalizeECHKeyLines(raw []string) ([]string, error) {
+	lines := make([]string, 0, len(raw))
+	for _, l := range raw {
+		if l = strings.TrimSpace(l); l != "" { // drops blank lines and stray \r
+			lines = append(lines, l)
+		}
+	}
+	if len(lines) == 0 {
+		return nil, fmt.Errorf("ECH is enabled but no key is set")
+	}
+	block, rest := pem.Decode([]byte(strings.Join(lines, "\n")))
+	if block == nil || block.Type != "ECH KEYS" || len(bytes.TrimSpace(rest)) != 0 {
+		return nil, fmt.Errorf(`key must be a single PEM block of type "ECH KEYS"`)
+	}
+	return lines, nil
+}
+
 // defaultShadowsocksCipher is used when the panel sends no cipher.
 //
 // It mirrors the panel's own fallback so the two ends cannot disagree:
@@ -418,7 +443,7 @@ func buildTransport(nodeInfo *api.NodeInfo, fronted bool) (*option.V2RayTranspor
 	return t, nil
 }
 
-func getCertFile(certConfig *cert.CertConfig, tlsSettings *api.TlsSettings, pusher func(string, any) error) (certFile string, keyFile string, err error) {
+func getCertFile(certConfig *cert.CertConfig, tlsSettings *api.TlsSettings, pusher func(string, any) error, client api.API) (certFile string, keyFile string, err error) {
 	if certConfig == nil {
 		return "", "", fmt.Errorf("certConfig is nil")
 	}
@@ -481,11 +506,21 @@ func getCertFile(certConfig *cert.CertConfig, tlsSettings *api.TlsSettings, push
 			hashes, hErr := generatedCert.Hashes()
 			if hErr == nil {
 				if pErr := pusher("cert_hashes", map[string]any{
-					"core":                          "singbox",
-					"certificate_sha256":            hashes.CertificateB64,
+					"core": "singbox",
+					"certificate_sha256": hashes.CertificateB64,
 					"certificate_public_key_sha256": hashes.PublicKeyB64,
 				}); pErr != nil {
 					log.Printf("cert_hashes push failed: %v", pErr)
+					if client != nil {
+						data := &api.CertHash{
+							Core: "singbox",
+							CertSha256: hashes.CertificateB64,
+							CertPublicKeySha256: hashes.PublicKeyB64,
+						}
+						if rErr := client.ReportCertHash(data); rErr != nil {
+							log.Printf("cert_hashes ReportCertHash failed: %v", rErr)
+						}
+					}
 				}
 			}			
 		}

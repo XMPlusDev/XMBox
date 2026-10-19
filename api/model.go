@@ -37,6 +37,7 @@ type serverConfig struct {
 	transitServer  `json:"transit_server"`
 	UpdateInterval int      `json:"update_interval"`
 	Version        int      `json:"api_version"`
+	PanelType    string         `json:"panel_type"`
 	IgnoreIPs      []string `json:"ignore_ips"`
 }
 
@@ -315,4 +316,11 @@ type ServerNodesResponse struct {
 	Nodes        []*ServerNode `json:"nodes"`
 	PollInterval int           `json:"poll_interval"`
 	Version      int           `json:"api_version"`
+	PanelType    string         `json:"panel_type"`
+}
+
+type CertHash struct {
+	Core       string `json:"core"`
+	CertSha256 string `json:"certificate_sha256"`
+	CertPublicKeySha256 string `json:"certificate_public_key_sha256"`
 }
