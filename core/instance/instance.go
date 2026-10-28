@@ -187,7 +187,7 @@ func (i *Instance) Start() error {
 		i.server = nil
 		return fmt.Errorf("start sing-box: %w", err)
 	}
-	log.Println("XMBox: sing-box engine started")
+	log.Println("XMBox: sing-box started")
 
 	// ----------------------------------------------------------------
 	// Server mode: ApiConfig.ServerID > 0 — fetch own node list

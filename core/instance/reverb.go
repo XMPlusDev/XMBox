@@ -322,7 +322,7 @@ func minDuration(a, b time.Duration) time.Duration {
 
 
 func signChannel(appKey, appSecret, socketID, channel string) string {
-	stringToSign := fmt.Sprintf("%s:%s:%d", socketID, channel)
+	stringToSign := fmt.Sprintf("%s:%s", socketID, channel)
 	mac := hmac.New(sha256.New, []byte(appSecret))
 	mac.Write([]byte(stringToSign))
 	sig := hex.EncodeToString(mac.Sum(nil))

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"path/filepath"
 	"reflect"
 	"regexp"
 	"time"
@@ -186,16 +185,8 @@ func (c *Controller) Start() error {
 		func() error { return c.subManager.SubscriptionMonitor(c.Tag, c.LogPrefix, c.nodePusher()) }))
 	c.taskManager.Add(scheduler.NewWithDelay(c.LogPrefix, "rules", c.currentPollInterval, c.ruleMonitor))
 
-	if c.nodeInfo.TlsSettings != nil && c.nodeInfo.TlsSettings.Type == "tls" {
-		c.taskManager.Add(scheduler.NewWithDelay(c.LogPrefix, "cert_renew",
-			c.currentPollInterval*60, c.certMonitor))
-	}
-
-	if c.nodeInfo.TlsSettings != nil && c.nodeInfo.TlsSettings.CertMode == "self-signed" {
-		c.taskManager.Add(scheduler.NewWithDelay(c.LogPrefix, "cert_self_signed",
-			24*time.Hour, c.selfSignedCertMonitor))
-	}
-
+	c.addCertTasks()
+	
 	go c.webhookTriggerLoop(c.currentPollInterval)
 
 	log.Printf("%s starting %d task schedulers", c.LogPrefix, c.taskManager.Count())
@@ -360,6 +351,7 @@ func (c *Controller) apiMonitor() error {
 			return err
 		}
 		c.LogPrefix = c.logPrefix()
+		c.syncCertTasks()
 
 		if err := c.nodeManager.AddNode(newNodeInfo, c.Tag, c.config, c.nodePusher()); err != nil {
 			log.Printf("%s AddNode error: %v", c.LogPrefix, err)
@@ -423,6 +415,8 @@ func (c *Controller) apiMonitor() error {
 	} else {
 		if nodeInfoChanged {
 			c.nodeInfo = newNodeInfo
+			c.syncCertTasks()
+			
 			if err := limiter.UpdateNodeInfo(c.Tag, newNodeInfo.SpeedLimit, newNodeInfo.IgnoreIPs); err != nil {
 				log.Printf("%s UpdateNodeInfo error: %v", c.LogPrefix, err)
 			}
@@ -567,63 +561,6 @@ func (c *Controller) certMonitor() error {
 	return nil
 }
 
-// selfSignedCertMonitor generates a self-signed certificate and pushes its
-// hashes to the panel via Reverb. It runs as its own scheduled task rather
-// than being mixed into certMonitor's ACME/Lego flow.
-func (c *Controller) selfSignedCertMonitor() error {
-	if c.nodeInfo.TlsSettings == nil {
-		return nil
-	}
-	if c.nodeInfo.TlsSettings.CertMode != "self-signed" {
-		return nil
-	}
-	if !safeCertName.MatchString(c.nodeInfo.TlsSettings.ServerName) {
-		return nil
-	}
-	pathBase := filepath.Join("/etc/XMBox", c.nodeInfo.TlsSettings.ServerName)
-	domain := c.nodeInfo.TlsSettings.CertDomainName
-	if domain == "" {
-		domain = c.nodeInfo.TlsSettings.ServerName
-	}
-	generatedCert, err := cert.GenerateTLSCert(cert.CertOptions{
-		Domains:      []string{domain},
-		CommonName:   c.nodeInfo.TlsSettings.ServerName,
-		Organization: "XMPlus",
-		IsCA:         false,
-		Expire:       3600 * 24 * time.Hour,
-	})
-	if err != nil {
-		return fmt.Errorf("self-signed cert generate: %w", err)
-	}
-	if err := generatedCert.Save(pathBase); err != nil {
-		return fmt.Errorf("self-signed cert save: %w", err)
-	}
-
-	if pusher := c.nodePusher(); pusher != nil {
-		hashes, hErr := generatedCert.Hashes()
-		if hErr == nil {
-			if pErr := pusher("cert_hashes", map[string]any{
-				"core": "singbox",
-				"certificate_sha256": hashes.CertificateB64,
-				"certificate_public_key_sha256": hashes.PublicKeyB64,
-			}); pErr != nil {
-				log.Printf("cert_hashes push failed: %v", pErr)
-				if c.client != nil {
-					data := &api.CertHash{
-						Core: "singbox",
-						CertSha256: hashes.CertificateB64,
-						CertPublicKeySha256: hashes.PublicKeyB64,
-					}
-					if rErr := c.client.ReportCertHash(data); rErr != nil {
-						log.Printf("cert_hashes ReportCertHash failed: %v", rErr)
-					}
-				}
-			}
-		}
-	}
-	return nil
-}
-
 func (c *Controller) logPrefix() string {
 	return fmt.Sprintf("[%s] %s(XMBox NodeID=%d)", c.clientInfo.APIHost, c.nodeInfo.Protocol, c.nodeInfo.ID)
 }
@@ -634,4 +571,18 @@ func (c *Controller) buildNodeTag() string {
 
 func (c *Controller) buildRelayTag() string {
 	return fmt.Sprintf("relay_%s_%d_%d", c.relayNodeInfo.NodeType, c.relayNodeInfo.Port, c.nodeInfo.RelayNodeID)
+}
+
+// selfSignedCertMonitor generates a self-signed certificate and pushes its
+// hashes to the panel via Reverb. It runs as its own scheduled task rather
+// than being mixed into certMonitor's ACME/Lego flow.
+func (c *Controller) selfSignedCertMonitor() error {
+    info := c.nodeInfo
+    if info == nil || info.TlsSettings == nil || info.TlsSettings.CertMode != "self-signed" {
+        return nil
+    }
+    if _, _, err := node.SelfSignedCertFile(info.TlsSettings, c.nodePusher(), c.client); err != nil {
+        log.Printf("%s self-signed cert renewal failed: %v", c.LogPrefix, err)
+    }
+    return nil
 }

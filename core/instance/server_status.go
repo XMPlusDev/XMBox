@@ -18,9 +18,11 @@ func (i *Instance) startServerStatusTask(rootClient api.API) {
 	task := scheduler.New(
 		"[ServerStatus]",
 		"server_status",
-		serverStatusReportInterval,
-		func() error {
-			return i.reportServerStatus(rootClient)
+		&scheduler.Periodic{
+			Interval: serverStatusReportInterval,
+			Execute: func() error {
+				return i.reportServerStatus(rootClient)
+			},
 		},
 	)
 	i.serverStatusTask = task

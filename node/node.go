@@ -26,6 +26,7 @@ type Manager struct {
 	coreInstance *instance.Instance
 	
 	client     api.API
+	access     sync.Mutex
 
 	relayMu    sync.Mutex
 	relayRules map[string]adapter.Rule
@@ -48,7 +49,8 @@ func NewManager(coreInstance *instance.Instance, client api.API) *Manager {
 		relayRules:     make(map[string]adapter.Rule),
 		inboundScopes:  make(map[string][]*adapter.Scope),
 		outboundScopes: make(map[string]*adapter.Scope),
-		client:     client,
+		client:         client,
+		access:         sync.Mutex{},
 	}
 }
 
@@ -326,8 +328,9 @@ func managerSplice(holder any, sliceName, mapName, tag string, keep func(item an
 	if err != nil {
 		return err
 	}
-	access.MethodByName("Lock").Call(nil)
-	defer access.MethodByName("Unlock").Call(nil)
+	lock := access.Addr()
+	lock.MethodByName("Lock").Call(nil)
+	defer lock.MethodByName("Unlock").Call(nil)
 
 	byTag, err := settable(mapName)
 	if err != nil {

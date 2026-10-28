@@ -5,7 +5,6 @@ import (
 	"time"
 )
 
-// Periodic executes a function at a fixed interval.
 type Periodic struct {
 	Interval time.Duration
 	Execute  func() error
@@ -14,56 +13,69 @@ type Periodic struct {
 	access  sync.Mutex
 	timer   *time.Timer
 	running bool
+	gen     uint64 
 }
 
-// Start begins periodic execution. If delay is true the first run is deferred
-// by one interval; otherwise it fires immediately.
+func (t *Periodic) GetInterval() time.Duration {
+	t.access.Lock()
+	defer t.access.Unlock()
+	return t.Interval
+}
+
+func (t *Periodic) SetInterval(d time.Duration) {
+	t.access.Lock()
+	defer t.access.Unlock()
+	t.Interval = d
+}
+
+func (t *Periodic) schedule(d time.Duration, gen uint64) {
+	t.timer = time.AfterFunc(d, func() { t.run(gen) })
+}
+
+func (t *Periodic) run(gen uint64) {
+	t.access.Lock()
+	if !t.running || t.gen != gen { 
+		t.access.Unlock()
+		return
+	}
+	t.access.Unlock()
+
+	t.Execute() //nolint:errcheck — callers log their own errors
+
+	t.access.Lock()
+	defer t.access.Unlock()
+	if t.running && t.gen == gen {
+		t.schedule(t.Interval, gen)
+	}
+}
+
 func (t *Periodic) Start() error {
 	t.access.Lock()
 	defer t.access.Unlock()
+
 	if t.running {
 		return nil
 	}
 	t.running = true
+	t.gen++
+
 	if t.delay {
-		t.timer = time.AfterFunc(t.Interval, t.run)
+		t.schedule(t.Interval, t.gen)
 	} else {
-		t.timer = time.AfterFunc(0, t.run)
+		t.schedule(0, t.gen)
 	}
 	return nil
 }
 
-// Close stops periodic execution.
 func (t *Periodic) Close() error {
 	t.access.Lock()
 	defer t.access.Unlock()
+
 	t.running = false
+	t.gen++ // invalidate any in-flight run and any timer that already fired
 	if t.timer != nil {
 		t.timer.Stop()
 		t.timer = nil
-	}
-	return nil
-}
-
-func (t *Periodic) run() {
-	t.Execute() //nolint:errcheck — caller logs errors itself
-	t.access.Lock()
-	defer t.access.Unlock()
-	if t.running {
-		t.timer = time.AfterFunc(t.Interval, t.run)
-	}
-}
-
-// RestartWithInterval changes the interval and immediately resets the timer.
-func (t *Periodic) RestartWithInterval(d time.Duration) error {
-	t.access.Lock()
-	defer t.access.Unlock()
-	t.Interval = d
-	if t.timer != nil {
-		t.timer.Stop()
-	}
-	if t.running {
-		t.timer = time.AfterFunc(d, t.run)
 	}
 	return nil
 }

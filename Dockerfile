@@ -1,10 +1,10 @@
-FROM golang:1.27.2-alpine AS builder
+FROM golang:1.27.3-alpine AS builder
 WORKDIR /app
 COPY . .
 ENV CGO_ENABLED=0
 RUN go mod tidy
 RUN go mod download
-RUN go build -v -o XMBox -tags "http2legacy sing with_quic with_grpc with_utls with_gvisor" -trimpath -ldflags "-s -w -buildid=" .
+RUN go build -v -o XMBox -tags "http2legacy with_quic with_grpc with_utls with_gvisor" -trimpath -ldflags "-s -w -buildid=" .
 
 FROM alpine
 RUN apk --update --no-cache add tzdata ca-certificates \

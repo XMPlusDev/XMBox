@@ -1,89 +1,139 @@
 package scheduler
 
 import (
-	"fmt"
 	"log"
 	"sync"
 	"time"
 )
 
-// PeriodicTask wraps Periodic with a name and logging.
 type PeriodicTask struct {
-	LogTag string
-	Tag    string
+	LogTag  string
+	Tag     string
 	*Periodic
 	mu      sync.Mutex
 	running bool
 }
 
-// New creates a PeriodicTask that fires immediately on start.
-func New(logTag, tag string, interval time.Duration, fn func() error) *PeriodicTask {
+func New(logTag string, tag string, periodic *Periodic) *PeriodicTask {
+	return &PeriodicTask{LogTag: logTag, Tag: tag, Periodic: periodic}
+}
+
+func NewWithInterval(logTag string, tag string, interval time.Duration, execute func() error) *PeriodicTask {
 	return &PeriodicTask{
-		LogTag: logTag,
-		Tag:    tag,
-		Periodic: &Periodic{
-			Interval: interval,
-			Execute: func() error {
-				if err := fn(); err != nil {
-					log.Printf("%s [%s] task error: %v", logTag, tag, err)
-				}
-				return nil
-			},
-		},
+		LogTag:   logTag,
+		Tag:      tag,
+		Periodic: &Periodic{Interval: interval, Execute: execute},
 	}
 }
 
-// NewWithDelay creates a PeriodicTask that waits one interval before the first run.
-func NewWithDelay(logTag, tag string, interval time.Duration, fn func() error) *PeriodicTask {
-	t := New(logTag, tag, interval, fn)
-	t.Periodic.delay = true
-	return t
+func NewWithDelay(logTag string, tag string, interval time.Duration, execute func() error) *PeriodicTask {
+	return &PeriodicTask{
+		LogTag:   logTag,
+		Tag:      tag,
+		Periodic: &Periodic{Interval: interval, Execute: execute, delay: true},
+	}
 }
 
-// Start begins the periodic task.
-func (t *PeriodicTask) Start() error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if t.running {
+func (pt *PeriodicTask) Start() error {
+	pt.mu.Lock()
+	defer pt.mu.Unlock()
+
+	if pt.running {
 		return nil
 	}
-	t.running = true
-	return t.Periodic.Start()
+	if pt.Periodic != nil {
+		if err := pt.Periodic.Start(); err != nil {
+			return err
+		}
+		pt.running = true
+	}
+	return nil
 }
 
-// Close stops the periodic task.
-func (t *PeriodicTask) Close() error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.running = false
-	return t.Periodic.Close()
+func (pt *PeriodicTask) Close() error {
+	pt.mu.Lock()
+	defer pt.mu.Unlock()
+
+	if !pt.running {
+		return nil
+	}
+	if pt.Periodic != nil {
+		if err := pt.Periodic.Close(); err != nil {
+			return err
+		}
+		pt.running = false
+	}
+	return nil
 }
 
-// RestartWithInterval changes the interval atomically.
-func (t *PeriodicTask) RestartWithInterval(d time.Duration) error {
-	return t.Periodic.RestartWithInterval(d)
+func (pt *PeriodicTask) IsRunning() bool {
+	pt.mu.Lock()
+	defer pt.mu.Unlock()
+	return pt.running
 }
 
-// Manager owns a named collection of PeriodicTasks.
+func (pt *PeriodicTask) Restart() error {
+	if err := pt.Close(); err != nil {
+		return err
+	}
+	return pt.Start()
+}
+
+func (pt *PeriodicTask) RestartWithInterval(interval time.Duration) error {
+	if err := pt.Close(); err != nil {
+		return err
+	}
+	pt.Periodic.SetInterval(interval)
+	return pt.Start()
+}
+
 type Manager struct {
 	tasks []*PeriodicTask
 	mu    sync.RWMutex
 }
 
-// NewManager returns an empty Manager.
-func NewManager() *Manager { return &Manager{} }
-
-// Add registers a task.
-func (m *Manager) Add(t *PeriodicTask) {
-	m.mu.Lock()
-	m.tasks = append(m.tasks, t)
-	m.mu.Unlock()
+func NewManager() *Manager {
+	return &Manager{tasks: make([]*PeriodicTask, 0)}
 }
 
-// GetTask returns the task with the given tag, or nil.
+func (m *Manager) Add(task *PeriodicTask) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.tasks = append(m.tasks, task)
+}
+
+func (m *Manager) StartAll() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, t := range m.tasks {
+		if err := t.Start(); err != nil {
+			log.Printf("%s Failed to start task %s: %v", t.LogTag, t.Tag, err)
+			return err
+		}
+		log.Printf("%s Task %s started", t.LogTag, t.Tag)
+	}
+	return nil
+}
+
+func (m *Manager) CloseAll() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var lastErr error
+	for _, t := range m.tasks {
+		if err := t.Close(); err != nil {
+			log.Printf("Failed to close task %s: %v", t.Tag, err)
+			lastErr = err
+		}
+	}
+	return lastErr
+}
+
 func (m *Manager) GetTask(tag string) *PeriodicTask {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+
 	for _, t := range m.tasks {
 		if t.Tag == tag {
 			return t
@@ -92,35 +142,44 @@ func (m *Manager) GetTask(tag string) *PeriodicTask {
 	return nil
 }
 
-// Count returns the number of registered tasks.
+func (m *Manager) RemoveTask(tag string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for i, t := range m.tasks {
+		if t.Tag == tag {
+			if err := t.Close(); err != nil {
+				return err
+			}
+			m.tasks = append(m.tasks[:i], m.tasks[i+1:]...)
+			return nil
+		}
+	}
+	return nil
+}
+
 func (m *Manager) Count() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return len(m.tasks)
 }
 
-// StartAll starts every registered task.
-func (m *Manager) StartAll() error {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	for _, t := range m.tasks {
-		if err := t.Start(); err != nil {
-			return fmt.Errorf("start task %q: %w", t.Tag, err)
-		}
-	}
-	return nil
-}
-
-// CloseAll stops every registered task.
-func (m *Manager) CloseAll() error {
+func (m *Manager) AddAndStart(task *PeriodicTask) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	var firstErr error
-	for _, t := range m.tasks {
-		if err := t.Close(); err != nil && firstErr == nil {
-			firstErr = fmt.Errorf("close task %q: %w", t.Tag, err)
+ 
+	for i, t := range m.tasks {
+		if t.Tag == task.Tag {
+			if err := t.Close(); err != nil {
+				return err
+			}
+			m.tasks = append(m.tasks[:i], m.tasks[i+1:]...)
+			break
 		}
 	}
-	m.tasks = nil
-	return firstErr
+	if err := task.Start(); err != nil {
+		return err
+	}
+	m.tasks = append(m.tasks, task)
+	return nil
 }

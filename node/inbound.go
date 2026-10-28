@@ -6,13 +6,10 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/pem"
-	"regexp"
 	"fmt"
 	"log"
 	"net/netip"
-	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common/json/badoption"
@@ -21,7 +18,6 @@ import (
 	"github.com/xmplusdev/xmbox/helper/cert"
 )
 
-var safeCertName = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$`)
 // ShadowTLSTag returns the tag of the ShadowTLS listener fronting a node.
 //
 // The node tag stays on the protocol inbound behind it, so traffic accounting,
@@ -481,50 +477,7 @@ func getCertFile(certConfig *cert.CertConfig, tlsSettings *api.TlsSettings, push
 		}
 		return lego.HTTPCert(tlsSettings.CertMode, tlsSettings.CertDomainName, tlsSettings.CertEmail)
 	case "self-signed":
-		if !safeCertName.MatchString(tlsSettings.ServerName) {
-			return "", "", fmt.Errorf("invalid server name %q for self-signed certificate", tlsSettings.ServerName)
-		}
-		pathBase := filepath.Join("/etc/XMBox", tlsSettings.ServerName)
-		domain := tlsSettings.CertDomainName
-		if domain == "" {
-			domain = tlsSettings.ServerName
-		}
-		generatedCert, err := cert.GenerateTLSCert(cert.CertOptions{
-			Domains:      []string{domain},
-			CommonName:   tlsSettings.ServerName,
-			Organization: "XMPlus",
-			IsCA:         false,
-			Expire:       3600 * 24 * time.Hour,
-		})
-		if err != nil {
-			return "", "", err
-		}
-		if err := generatedCert.Save(pathBase); err != nil {
-			return "", "", err
-		}
-		if pusher != nil {
-			hashes, hErr := generatedCert.Hashes()
-			if hErr == nil {
-				if pErr := pusher("cert_hashes", map[string]any{
-					"core": "singbox",
-					"certificate_sha256": hashes.CertificateB64,
-					"certificate_public_key_sha256": hashes.PublicKeyB64,
-				}); pErr != nil {
-					log.Printf("cert_hashes push failed: %v", pErr)
-					if client != nil {
-						data := &api.CertHash{
-							Core: "singbox",
-							CertSha256: hashes.CertificateB64,
-							CertPublicKeySha256: hashes.PublicKeyB64,
-						}
-						if rErr := client.ReportCertHash(data); rErr != nil {
-							log.Printf("cert_hashes ReportCertHash failed: %v", rErr)
-						}
-					}
-				}
-			}			
-		}
-		return pathBase + ".crt", pathBase + ".key", nil
+		return SelfSignedCertFile(tlsSettings, pusher, client)
 	default:
 		return "", "", fmt.Errorf("unsupported certmode: %s", tlsSettings.CertMode)
 	}
