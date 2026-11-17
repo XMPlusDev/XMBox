@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/bitly/go-simplejson"
-	"github.com/go-resty/resty/v2"
+	//"github.com/go-resty/resty/v2"
 )
 
 // GetServerNodes fetches the list of node IDs assigned to this machine (server mode).
@@ -617,64 +617,203 @@ func (c *Client) parseRelaySecuritySettings(securityData *simplejson.Json, nodeI
 }
 
 // GetNodeRule fetches the blocking rules for c.NodeID.
-func (c *Client) GetNodeRule() (*[]DetectRules, error) {
+// GetBlockRules fetches the block rules for c.NodeID.
+// It returns RuleNotModified when the panel answers 304.
+func (c *Client) GetBlockRules() ([]BlockRule, error) {
 	res, err := c.client.R().
 		SetBody(map[string]string{"key": c.APIKey, "core": "singbox"}).
 		ForceContentType("application/json").
 		SetPathParam("serverId", strconv.Itoa(c.NodeID)).
 		SetHeader("If-None-Match", c.eTags["rule"]).
-		SetResult(&RuleResponse{}).
 		Post("/api/server/rules/{serverId}")
 	if err != nil {
 		return nil, err
 	}
-
 	if res.StatusCode() == 304 {
 		return nil, errors.New(RuleNotModified)
 	}
-	if etag := res.Header().Get("ETag"); etag != "" {
-		if etag == c.eTags["rule"] {
-			return nil, errors.New(RuleNotModified)
-		}
-		c.eTags["rule"] = etag
-	}
 
-	response, err := parseRuleResponse(res, err)
+	response, err := c.checkResponse(res, err)
 	if err != nil {
 		return nil, err
 	}
-
-	var rulesList []Rule
-	if err := json.Unmarshal(response.Data, &rulesList); err != nil {
-		return nil, fmt.Errorf("unmarshal rules: %w", err)
+	list, ok := response.CheckGet("ruleSettings")
+	if !ok {
+		return nil, fmt.Errorf("rules response has no ruleSettings, is the panel up to date?")
 	}
-	return parseRulesList(&rulesList)
-}
-
-func parseRuleResponse(res *resty.Response, err error) (*RuleResponse, error) {
+	rules, err := parseBlockRules(list)
 	if err != nil {
-		return nil, fmt.Errorf("rule request failed: %w", err)
+		return nil, fmt.Errorf("parse rules: %w", err)
 	}
-	if res.StatusCode() >= 400 {
-		return nil, fmt.Errorf("rule request error: %s", string(res.Body()))
+
+	// Remember the ETag only after a good parse, so a bad response is retried.
+	if etag := res.Header().Get("ETag"); etag != "" {
+		c.eTags["rule"] = etag
 	}
-	response, ok := res.Result().(*RuleResponse)
-	if !ok || response == nil {
-		return nil, fmt.Errorf("failed to parse rule response")
-	}
-	return response, nil
+	return rules, nil
 }
 
-func parseRulesList(rules *[]Rule) (*[]DetectRules, error) {
-	out := make([]DetectRules, 0, len(*rules))
-	for _, r := range *rules {
-		re, err := regexp.Compile(r.Regex)
-		if err != nil {
-			return nil, fmt.Errorf("invalid regex for rule %d %q: %w", r.Id, r.Regex, err)
-		}
-		out = append(out, DetectRules{ID: r.Id, Pattern: re})
+func parseBlockRules(list *simplejson.Json) ([]BlockRule, error) {
+	arr, err := list.Array()
+	if err != nil {
+		return nil, fmt.Errorf("ruleSettings must be an array: %w", err)
 	}
-	return &out, nil
+
+	rules := make([]BlockRule, 0, len(arr))
+	for i := range arr {
+		item := list.GetIndex(i)
+		v, ok := item.CheckGet("value")
+		if !ok || !isBlockRule(v) {
+			continue
+		}
+
+		r := BlockRule{
+			ID:            item.Get("id").MustInt(),
+			Protocol:      ruleStrings(v, "protocol"),
+			Domain:        ruleStrings(v, "domain"),
+			DomainSuffix:  ruleStrings(v, "domain_suffix"),
+			DomainKeyword: ruleStrings(v, "domain_keyword"),
+			DomainRegex:   ruleStrings(v, "domain_regex"),
+			SourceIPCIDR:  ruleStrings(v, "source_ip_cidr"),
+			IPCIDR:        ruleStrings(v, "ip_cidr"),
+		}
+
+		for _, n := range ruleStrings(v, "network") {
+			for _, p := range strings.Split(n, ",") {
+				p = strings.ToLower(strings.TrimSpace(p))
+				if p == "" {
+					continue
+				}
+				if p != "tcp" && p != "udp" {
+					return nil, fmt.Errorf("rule %d: unsupported network %q", r.ID, p)
+				}
+				r.Network = append(r.Network, p)
+			}
+		}
+
+		for _, re := range r.DomainRegex {
+			if _, err := regexp.Compile(re); err != nil {
+				return nil, fmt.Errorf("rule %d: invalid domain_regex %q: %w", r.ID, re, err)
+			}
+		}
+
+		if r.Port, r.PortRange, err = ruleCSVPorts(v); err != nil {
+			return nil, fmt.Errorf("rule %d: %w", r.ID, err)
+		}
+
+		r.Method = strings.ToLower(strings.TrimSpace(v.Get("method").MustString()))
+		if r.Method == "" {
+			r.Method = "default"
+		}
+		if r.Method != "default" && r.Method != "drop" {
+			return nil, fmt.Errorf("rule %d: unsupported reject method %q", r.ID, r.Method)
+		}
+		r.NoDrop = r.Method == "default" && v.Get("no_drop").MustBool()
+
+		// A rule with no condition would block everything on the node, skip it.
+		if len(r.Network)+len(r.Protocol)+len(r.Domain)+len(r.DomainSuffix)+len(r.DomainKeyword)+
+			len(r.DomainRegex)+len(r.SourceIPCIDR)+len(r.IPCIDR)+len(r.Port)+len(r.PortRange) == 0 {
+			continue
+		}
+		rules = append(rules, r)
+	}
+	return rules, nil
+}
+
+// isBlockRule: the reject action, or a route to the legacy "block" outbound.
+func isBlockRule(v *simplejson.Json) bool {
+	action := strings.ToLower(strings.TrimSpace(v.Get("action").MustString()))
+	switch action {
+	case "reject":
+		return true
+	case "", "route":
+		return strings.EqualFold(strings.TrimSpace(v.Get("outbound").MustString()), "block")
+	}
+	return false
+}
+
+// ruleStrings reads an array or a single string, trimmed, without empty entries.
+// It does not split on commas, a domain regex may contain them.
+func ruleStrings(j *simplejson.Json, key string) []string {
+	v, ok := j.CheckGet(key)
+	if !ok {
+		return nil
+	}
+	var raw []string
+	if arr, err := v.StringArray(); err == nil {
+		raw = arr
+	} else if s, err := v.String(); err == nil {
+		raw = []string{s}
+	}
+	out := make([]string, 0, len(raw))
+	for _, s := range raw {
+		if s = strings.TrimSpace(s); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// ruleCSVPorts reads port (numbers or strings) and port_range, and returns
+// single ports and "from:to" ranges. "-" is accepted as the range separator.
+func ruleCSVPorts(v *simplejson.Json) ([]uint16, []string, error) {
+	var ports []uint16
+	var ranges []string
+
+	add := func(s string) error {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			return nil
+		}
+		if n, err := strconv.ParseUint(s, 10, 16); err == nil {
+			ports = append(ports, uint16(n))
+			return nil
+		}
+		s = strings.Replace(s, "-", ":", 1)
+		parts := strings.SplitN(s, ":", 2)
+		if len(parts) != 2 || (parts[0] == "" && parts[1] == "") {
+			return fmt.Errorf("invalid port %q", s)
+		}
+		var from, to uint64
+		var err error
+		if parts[0] != "" {
+			if from, err = strconv.ParseUint(parts[0], 10, 16); err != nil {
+				return fmt.Errorf("invalid port range %q", s)
+			}
+		}
+		if parts[1] != "" {
+			if to, err = strconv.ParseUint(parts[1], 10, 16); err != nil {
+				return fmt.Errorf("invalid port range %q", s)
+			}
+		}
+		if parts[0] != "" && parts[1] != "" && from > to {
+			return fmt.Errorf("port range %q starts after it ends", s)
+		}
+		ranges = append(ranges, s)
+		return nil
+	}
+
+	if arr, err := v.Get("port").Array(); err == nil {
+		for i := range arr {
+			item := v.Get("port").GetIndex(i)
+			if n, err := item.Int(); err == nil {
+				if n < 0 || n > 65535 {
+					return nil, nil, fmt.Errorf("port out of range: %d", n)
+				}
+				ports = append(ports, uint16(n))
+			} else if s, err := item.String(); err == nil {
+				if err := add(s); err != nil {
+					return nil, nil, err
+				}
+			}
+		}
+	}
+	for _, s := range ruleStrings(v, "port_range") {
+		if err := add(s); err != nil {
+			return nil, nil, err
+		}
+	}
+	return ports, ranges, nil
 }
 
 func selectSinglePort(portString string) (uint32, error) {

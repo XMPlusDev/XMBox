@@ -19,7 +19,6 @@ import (
 	"github.com/xmplusdev/xmbox/helper/counter"
 	"github.com/xmplusdev/xmbox/limiter"
 	"github.com/xmplusdev/xmbox/helper/rate"
-	"github.com/xmplusdev/xmbox/helper/rule"
 )
 
 var _ adapter.ConnectionTracker = (*Dispatcher)(nil)
@@ -69,15 +68,6 @@ func (d *Dispatcher) RoutedConnection(
 		conn = rate.NewConn(conn, bucket, bucket)
 	}
 
-	if rm, err := rule.GetRuleManager(m.Inbound); err == nil {
-		dest := m.Destination.AddrString()
-		if rm.CheckRule(m.Inbound, dest) {
-			conn.Close()
-			log.Printf("[%s] destination [%s] blocked by rule", m.Inbound, dest)
-			return newDeadConn(conn)
-		}
-	}
-
 	t := d.getOrCreateCounter(m.Inbound)
 
 	var deregister func()
@@ -121,15 +111,6 @@ func (d *Dispatcher) RoutedPacketConnection(
 	}
 	if bucket != nil && isLimited {
 		conn = rate.NewPacketConn(conn, bucket, bucket)
-	}
-
-	if rm, err := rule.GetRuleManager(m.Inbound); err == nil {
-		dest := m.Destination.AddrString()
-		if rm.CheckRule(m.Inbound, dest) {
-			conn.Close()
-			log.Printf("[%s] destination [%s] blocked by rule", m.Inbound, dest)
-			return newDeadPacketConn(conn)
-		}
 	}
 
 	t := d.getOrCreateCounter(m.Inbound)

@@ -7,7 +7,7 @@ type API interface {
 
 	// Node endpoints
 	GetNodeInfo() (*NodeInfo, error)
-	GetNodeRule() (*[]DetectRules, error)
+	GetBlockRules() ([]BlockRule, error)
 	GetTransitNode() (*RelayNodeInfo, error)
 
 	// Subscription endpoints

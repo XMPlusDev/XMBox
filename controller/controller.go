@@ -13,7 +13,6 @@ import (
 	"github.com/xmplusdev/xmbox/core/instance"
 	"github.com/xmplusdev/xmbox/limiter"
 	"github.com/xmplusdev/xmbox/node"
-	"github.com/xmplusdev/xmbox/helper/rule"
 	"github.com/xmplusdev/xmbox/helper/scheduler"
 	"github.com/xmplusdev/xmbox/service"
 	"github.com/xmplusdev/xmbox/subscription"
@@ -46,6 +45,7 @@ type Controller struct {
 	clientInfo   api.ClientInfo
 	client       api.API
 	nodeInfo     *api.NodeInfo
+	blockRules   []api.BlockRule
 	Tag          string
 	LogPrefix    string
 
@@ -138,14 +138,12 @@ func (c *Controller) Start() error {
 	c.Tag = c.buildNodeTag()
 	c.LogPrefix = c.logPrefix()
 
-	if ruleList, err := c.client.GetNodeRule(); err != nil {
-		log.Printf("%s get rule list failed: %v", c.LogPrefix, err)
-	} else if ruleList != nil && len(*ruleList) > 0 {
-		log.Printf("%s added %d node rules", c.LogPrefix, len(*ruleList))
-		if err := rule.UpdateRule(c.Tag, *ruleList); err != nil {
-			return fmt.Errorf("UpdateRule: %w", err)
-		}
+	blockRules, err := c.client.GetBlockRules()
+	if err != nil {
+		return fmt.Errorf("GetBlockRules: %w", err)
 	}
+	c.blockRules = blockRules
+	log.Printf("%s loaded %d block rules", c.LogPrefix, len(blockRules))
 
 	subscriptions, err := c.client.GetSubscriptionList()
 	if err != nil {
@@ -153,7 +151,7 @@ func (c *Controller) Start() error {
 	}
 	c.subscriptionList = subscriptions
 
-	if err := c.nodeManager.AddNode(c.nodeInfo, c.Tag, c.config, c.nodePusher()); err != nil {
+	if err := c.nodeManager.AddNode(c.nodeInfo, c.Tag, c.config, c.nodePusher(), c.blockRules); err != nil {
 		return fmt.Errorf("AddNode: %w", err)
 	}
 
@@ -353,7 +351,7 @@ func (c *Controller) apiMonitor() error {
 		c.LogPrefix = c.logPrefix()
 		c.syncCertTasks()
 
-		if err := c.nodeManager.AddNode(newNodeInfo, c.Tag, c.config, c.nodePusher()); err != nil {
+		if err := c.nodeManager.AddNode(newNodeInfo, c.Tag, c.config, c.nodePusher(), c.blockRules); err != nil {
 			log.Printf("%s AddNode error: %v", c.LogPrefix, err)
 			c.nodeInfo, c.Tag = oldNodeInfo, oldTag
 			return err
@@ -512,20 +510,20 @@ func (c *Controller) setupRelay(nodeInfo *api.NodeInfo, subscriptions *[]api.Sub
 }
 
 func (c *Controller) ruleMonitor() error {
-	ruleList, err := c.client.GetNodeRule()
+	rules, err := c.client.GetBlockRules()
 	if err != nil {
 		if err.Error() == api.RuleNotModified {
 			return nil
 		}
-		log.Printf("%s GetNodeRule error: %v", c.LogPrefix, err)
+		log.Printf("%s GetBlockRules error: %v", c.LogPrefix, err)
 		return err
 	}
-	if ruleList != nil && len(*ruleList) > 0 {
-		log.Printf("%s updating %d node rules", c.LogPrefix, len(*ruleList))
-		if err := rule.UpdateRule(c.Tag, *ruleList); err != nil {
-			log.Printf("%s UpdateRule error: %v", c.LogPrefix, err)
-		}
+	if err := c.nodeManager.SetBlockRules(c.Tag, rules); err != nil {
+		log.Printf("%s SetBlockRules error: %v", c.LogPrefix, err)
+		return err
 	}
+	c.blockRules = rules
+	log.Printf("%s updated %d block rules", c.LogPrefix, len(rules))
 	return nil
 }
 

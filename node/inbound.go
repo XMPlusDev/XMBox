@@ -77,6 +77,7 @@ func getInboundOptions(tag string, nodeInfo *api.NodeInfo, config *Config, pushe
 		switch nodeInfo.TlsSettings.Type {
 		case "tls":
 			tls.Enabled = nodeInfo.TlsSettings.Enabled
+			tls.ServerName = nodeInfo.TlsSettings.ServerName
 			tls.ALPN = badoption.Listable[string](nodeInfo.TlsSettings.Alpn)
 			if nodeInfo.TlsSettings.ClientAuthentication != "" {
 				mode, err := parseClientAuthentication(nodeInfo.TlsSettings.ClientAuthentication)

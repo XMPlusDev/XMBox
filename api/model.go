@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"regexp"
 )
 
 const (
@@ -66,18 +65,6 @@ type transitServer struct {
 // RuleResponse is the envelope for /api/server/rules/{id}.
 type RuleResponse struct {
 	Data json.RawMessage `json:"ruleSettings"`
-}
-
-// Rule is a single raw blocking rule from the panel.
-type Rule struct {
-	Id    int    `json:"id"`
-	Regex string `json:"value"`
-}
-
-// DetectRules is a compiled blocking rule.
-type DetectRules struct {
-	ID      int
-	Pattern *regexp.Regexp
 }
 
 // SubscriptionResponse is the envelope for /api/server/subscription/lists/{id}.
@@ -323,4 +310,20 @@ type CertHash struct {
 	Core       string `json:"core"`
 	CertSha256 string `json:"certificate_sha256"`
 	CertPublicKeySha256 string `json:"certificate_public_key_sha256"`
+}
+
+type BlockRule struct {
+	ID            int
+	Network       []string 
+	Protocol      []string
+	Domain        []string
+	DomainSuffix  []string
+	DomainKeyword []string
+	DomainRegex   []string
+	SourceIPCIDR  []string
+	IPCIDR        []string
+	Port          []uint16
+	PortRange     []string 
+	Method        string 
+	NoDrop        bool
 }

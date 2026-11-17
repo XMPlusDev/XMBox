@@ -28,8 +28,9 @@ type Manager struct {
 	client     api.API
 	access     sync.Mutex
 
-	relayMu    sync.Mutex
+	rulesMu    sync.Mutex
 	relayRules map[string]adapter.Rule
+	blockRules map[string]adapter.Rule
 
 	// scopeMu guards inboundScopes and outboundScopes.
 	scopeMu sync.Mutex
@@ -47,6 +48,7 @@ func NewManager(coreInstance *instance.Instance, client api.API) *Manager {
 	return &Manager{
 		coreInstance:   coreInstance,
 		relayRules:     make(map[string]adapter.Rule),
+		blockRules:     make(map[string]adapter.Rule),
 		inboundScopes:  make(map[string][]*adapter.Scope),
 		outboundScopes: make(map[string]*adapter.Scope),
 		client:         client,
@@ -58,10 +60,15 @@ func NewManager(coreInstance *instance.Instance, client api.API) *Manager {
 // sing-box, and starts them in every lifecycle stage. A node is usually one
 // inbound, but a ShadowTLS-fronted node is a chain: the protocol on loopback
 // plus the ShadowTLS listener that detours into it.
-func (m *Manager) AddNode(nodeInfo *api.NodeInfo, tag string, config *Config, pusher func(string, any) error) error {
+func (m *Manager) AddNode(nodeInfo *api.NodeInfo, tag string, config *Config, pusher func(string, any) error, blockRules []api.BlockRule) error {
 	inbounds, err := getInboundOptions(tag, nodeInfo, config, pusher, m.client)
 	if err != nil {
 		return fmt.Errorf("build inbound config: %w", err)
+	}
+
+	// Block rules go in before any inbound starts accepting connections.
+	if err := m.SetBlockRules(tag, blockRules); err != nil {
+		return fmt.Errorf("set block rules: %w", err)
 	}
 
 	b := m.coreInstance.GetBox()
@@ -77,12 +84,10 @@ func (m *Manager) AddNode(nodeInfo *api.NodeInfo, tag string, config *Config, pu
 			inbound.Type,
 			inbound.Options,
 		); err != nil {
-			// Roll back whatever is already up, so a half-built node never
-			// lingers — a ShadowTLS listener without its protocol behind it
-			// would accept connections and drop every one.
 			for _, rollbackKick := range created {
 				_ = m.removeInbound(rollbackKick.Tag())
 			}
+			_ = m.RemoveBlockRules(tag)
 			return fmt.Errorf("create inbound %q: %w", inbound.Tag, err)
 		}
 		inboundObj, _ := b.Inbound().Get(inbound.Tag)
@@ -93,9 +98,118 @@ func (m *Manager) AddNode(nodeInfo *api.NodeInfo, tag string, config *Config, pu
 		for _, rollbackKick := range created {
 			_ = m.removeInbound(rollbackKick.Tag())
 		}
+		_ = m.RemoveBlockRules(tag)
 		return fmt.Errorf("start inbound %q: %w", created[len(created)-1].Tag(), err)
 	}
 	return nil
+}
+
+// SetBlockRules replaces the node's block rules in one swap, so there is no
+// moment where the old rules are gone and the new ones are not yet in. The
+// rules are placed before the relay rules (first match wins, and a relayed
+// user's blocked traffic must not be routed to the relay).
+func (m *Manager) SetBlockRules(tag string, rules []api.BlockRule) error {
+	ctx := m.coreInstance.GetCtx()
+	logger := m.coreInstance.GetLogFactory().Logger()
+
+	type built struct {
+		tag  string
+		rule adapter.Rule
+	}
+	fresh := make([]built, 0, len(rules))
+	closeFresh := func() {
+		for _, f := range fresh {
+			closeRule(f.rule)
+		}
+	}
+
+	for i, r := range rules {
+		id := r.ID
+		if id <= 0 {
+			id = i
+		}
+		opts, err := BlockRuleOptions(tag, r)
+		if err != nil {
+			closeFresh()
+			return fmt.Errorf("block rule %d: %w", r.ID, err)
+		}
+		rule, err := R.NewRule(ctx, logger, opts, true)
+		if err != nil {
+			closeFresh()
+			return fmt.Errorf("block rule %d: build: %w", r.ID, err)
+		}
+		if err := rule.Start(); err != nil {
+			closeFresh()
+			return fmt.Errorf("block rule %d: start: %w", r.ID, err)
+		}
+		fresh = append(fresh, built{BlockRuleTag(tag, id), rule})
+	}
+
+	rulesField, err := routerRulesField(m.coreInstance.GetBox().Router())
+	if err != nil {
+		closeFresh()
+		return err
+	}
+
+	m.rulesMu.Lock()
+	defer m.rulesMu.Unlock()
+
+	// Drop this node's previous block rules from the map and the router.
+	prefix := tag + "_block_"
+	old := make(map[adapter.Rule]struct{})
+	for t, r := range m.blockRules {
+		if strings.HasPrefix(t, prefix) {
+			old[r] = struct{}{}
+			delete(m.blockRules, t)
+		}
+	}
+
+	current := rulesField.Interface().([]adapter.Rule)
+	kept := make([]adapter.Rule, 0, len(current)+len(fresh))
+	for _, r := range current {
+		if _, drop := old[r]; !drop {
+			kept = append(kept, r)
+		}
+	}
+
+	at := m.firstRelayIndex(kept)
+	updated := make([]adapter.Rule, 0, len(kept)+len(fresh))
+	updated = append(updated, kept[:at]...)
+	for _, f := range fresh {
+		updated = append(updated, f.rule)
+		m.blockRules[f.tag] = f.rule
+	}
+	updated = append(updated, kept[at:]...)
+	rulesField.Set(reflect.ValueOf(updated))
+
+	for r := range old {
+		closeRule(r)
+	}
+	return nil
+}
+
+// RemoveBlockRules removes all of a node's block rules.
+func (m *Manager) RemoveBlockRules(tag string) error {
+	return m.SetBlockRules(tag, nil)
+}
+
+// firstRelayIndex returns the index of the first relay rule in rules, or
+// len(rules) when there is none. Callers must hold rulesMu.
+func (m *Manager) firstRelayIndex(rules []adapter.Rule) int {
+	for i, r := range rules {
+		for _, relay := range m.relayRules {
+			if r == relay {
+				return i
+			}
+		}
+	}
+	return len(rules)
+}
+
+func closeRule(r adapter.Rule) {
+	if c, ok := r.(interface{ Close() error }); ok {
+		_ = c.Close()
+	}
 }
 
 // RemoveNode removes every inbound belonging to the node with the given tag.
@@ -104,7 +218,10 @@ func (m *Manager) RemoveNode(tag string) error {
 	if err := m.removeInbound(api.ShadowTLSTag(tag)); err != nil {
 		return err
 	}
-	return m.removeInbound(tag)
+	if err := m.removeInbound(tag); err != nil {
+		return err
+	}
+	return m.RemoveBlockRules(tag)
 }
 
 // removeInbound removes one inbound by tag, if present.
@@ -445,8 +562,8 @@ func (m *Manager) addRouterRule(ruleTag string, options option.Rule) error {
 		return err
 	}
 
-	m.relayMu.Lock()
-	defer m.relayMu.Unlock()
+	m.rulesMu.Lock()
+	defer m.rulesMu.Unlock()
 
 	current := rulesField.Interface().([]adapter.Rule)
 	updated := make([]adapter.Rule, len(current), len(current)+1)
@@ -462,8 +579,8 @@ func (m *Manager) addRouterRule(ruleTag string, options option.Rule) error {
 func (m *Manager) removeRouterRule(ruleTag string) error {
 	b := m.coreInstance.GetBox()
 
-	m.relayMu.Lock()
-	defer m.relayMu.Unlock()
+	m.rulesMu.Lock()
+	defer m.rulesMu.Unlock()
 
 	rule, ok := m.relayRules[ruleTag]
 	if !ok {
