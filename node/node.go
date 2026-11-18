@@ -2,6 +2,7 @@ package node
 
 import (
 	"fmt"
+	"log"
 	"reflect"
 	"strings"
 	"sync"
@@ -19,6 +20,11 @@ import (
 	"github.com/xmplusdev/xmbox/api"
 	"github.com/xmplusdev/xmbox/core/instance"
 )
+
+type builtRule struct {
+	tag  string
+	rule adapter.Rule
+}
 
 // Manager creates and removes sing-box inbounds, outbounds, and per-subscription
 // relay routing rules for node configurations.
@@ -483,33 +489,159 @@ func managerOwned(list, item any) bool {
 	}
 	return false
 }
-// matching routing rule for each subscription, sending that user's traffic
-// arriving on mainTag's inbound to relayNodeInfo.
-func (m *Manager) AddRelayTag(relayNodeInfo *api.RelayNodeInfo, relayTag string, mainTag string, subscriptionInfo *[]api.SubscriptionInfo) error {
-	for _, subscription := range *subscriptionInfo {
+
+// addRelayOutbounds creates the per-subscription relay outbounds under relayTag.
+func (m *Manager) addRelayOutbounds(relayNodeInfo *api.RelayNodeInfo, relayTag string, subscriptionInfo *[]api.SubscriptionInfo) error {
+	for i := range *subscriptionInfo {
+		subscription := &(*subscriptionInfo)[i]
 		passwd := subscription.Passwd
 		if C.Contains(shadowaead_2022.List, strings.ToLower(relayNodeInfo.Cipher)) {
 			passwd = fmt.Sprintf("%s:%s", relayNodeInfo.ServerKey, subscription.Passwd)
 		}
 
-		outbounds, err := OutboundRelayBuilder(relayNodeInfo, relayTag, &subscription, passwd)
+		outbounds, err := OutboundRelayBuilder(relayNodeInfo, relayTag, subscription, passwd)
 		if err != nil {
 			return fmt.Errorf("failed to build relay outbound for Id %d: %w", subscription.Id, err)
 		}
 		// Reverse order: the ShadowTLS outbound a protocol detours through has
 		// to exist before the protocol that names it.
-		for i := len(outbounds) - 1; i >= 0; i-- {
-			if err := m.addOutbound(outbounds[i]); err != nil {
+		for j := len(outbounds) - 1; j >= 0; j-- {
+			if err := m.addOutbound(outbounds[j]); err != nil {
 				return fmt.Errorf("failed to add relay outbound for Id %d: %w", subscription.Id, err)
 			}
 		}
+	}
+	return nil
+}
 
-		ruleOptions, err := RelayRuleOptions(mainTag, relayTag, &subscription)
+// buildRelayRules builds and starts the relay router rules without installing them.
+func (m *Manager) buildRelayRules(mainTag, relayTag string, subscriptionInfo *[]api.SubscriptionInfo) ([]builtRule, error) {
+	ctx := m.coreInstance.GetCtx()
+	logger := m.coreInstance.GetLogFactory().Logger()
+
+	built := make([]builtRule, 0, len(*subscriptionInfo))
+	fail := func(err error) ([]builtRule, error) {
+		for _, b := range built {
+			closeRule(b.rule)
+		}
+		return nil, err
+	}
+
+	for i := range *subscriptionInfo {
+		subscription := &(*subscriptionInfo)[i]
+		options, err := RelayRuleOptions(mainTag, relayTag, subscription)
+		if err != nil {
+			return fail(fmt.Errorf("failed to build relay rule for Id %d: %w", subscription.Id, err))
+		}
+		rule, err := R.NewRule(ctx, logger, options, true)
+		if err != nil {
+			return fail(fmt.Errorf("build rule for Id %d: %w", subscription.Id, err))
+		}
+		if err := rule.Start(); err != nil {
+			return fail(fmt.Errorf("start rule for Id %d: %w", subscription.Id, err))
+		}
+		built = append(built, builtRule{tag: RelayRuleTag(relayTag, subscription), rule: rule})
+	}
+	return built, nil
+}
+
+// AddRelayTag adds a node's relay: outbounds first, then the rules that use them.
+func (m *Manager) AddRelayTag(relayNodeInfo *api.RelayNodeInfo, relayTag string, mainTag string, subscriptionInfo *[]api.SubscriptionInfo) error {
+	if err := m.addRelayOutbounds(relayNodeInfo, relayTag, subscriptionInfo); err != nil {
+		return err
+	}
+	for i := range *subscriptionInfo {
+		subscription := &(*subscriptionInfo)[i]
+		ruleOptions, err := RelayRuleOptions(mainTag, relayTag, subscription)
 		if err != nil {
 			return fmt.Errorf("failed to build relay rule for Id %d: %w", subscription.Id, err)
 		}
-		if err := m.addRouterRule(RelayRuleTag(relayTag, &subscription), ruleOptions); err != nil {
+		if err := m.addRouterRule(RelayRuleTag(relayTag, subscription), ruleOptions); err != nil {
 			return fmt.Errorf("failed to add relay rule for Id %d: %w", subscription.Id, err)
+		}
+	}
+	return nil
+}
+
+// SwapRelay replaces a node's relay without a moment where relayed users have
+// no relay rule. The new outbounds are created under newTag first. Then every
+// old relay rule is replaced by the new ones in a single assignment of the
+// router's rule list, in the same position, so block rules stay in front of
+// them. The old outbounds are removed after the swap.
+// oldTag is "" and oldSubs is nil when there is no relay yet.
+func (m *Manager) SwapRelay(oldTag string, oldSubs *[]api.SubscriptionInfo, relayNodeInfo *api.RelayNodeInfo, newTag, mainTag string, subs *[]api.SubscriptionInfo) error {
+	// 1. New outbounds under the new tag, the old relay keeps serving.
+	if err := m.addRelayOutbounds(relayNodeInfo, newTag, subs); err != nil {
+		_ = m.RemoveRelayTag(newTag, subs)
+		return err
+	}
+
+	// 2. Build the new rules before touching the router.
+	fresh, err := m.buildRelayRules(mainTag, newTag, subs)
+	if err != nil {
+		_ = m.RemoveRelayTag(newTag, subs)
+		return err
+	}
+
+	rulesField, err := routerRulesField(m.coreInstance.GetBox().Router())
+	if err != nil {
+		for _, f := range fresh {
+			closeRule(f.rule)
+		}
+		_ = m.RemoveRelayTag(newTag, subs)
+		return err
+	}
+
+	// 3. One swap.
+	m.rulesMu.Lock()
+	old := make(map[adapter.Rule]string)
+	if oldSubs != nil {
+		for i := range *oldSubs {
+			tag := RelayRuleTag(oldTag, &(*oldSubs)[i])
+			if r, ok := m.relayRules[tag]; ok {
+				old[r] = tag
+			}
+		}
+	}
+
+	current := rulesField.Interface().([]adapter.Rule)
+	updated := make([]adapter.Rule, 0, len(current)+len(fresh))
+	inserted := false
+	insertFresh := func() {
+		for _, f := range fresh {
+			updated = append(updated, f.rule)
+		}
+		inserted = true
+	}
+	for _, r := range current {
+		if _, isOld := old[r]; isOld {
+			if !inserted {
+				insertFresh() // first old relay rule: the new ones take its place
+			}
+			continue
+		}
+		updated = append(updated, r)
+	}
+	if !inserted {
+		insertFresh() // no old relay rules: append behind the existing rules
+	}
+	rulesField.Set(reflect.ValueOf(updated))
+
+	for _, tag := range old {
+		delete(m.relayRules, tag)
+	}
+	for _, f := range fresh {
+		m.relayRules[f.tag] = f.rule
+	}
+	m.rulesMu.Unlock()
+
+	// 4. The old relay is out of the router, clean it up.
+	for r := range old {
+		closeRule(r)
+	}
+	if oldSubs != nil {
+		if err := m.RemoveRelayTag(oldTag, oldSubs); err != nil {
+			log.Printf("relay %s: removing old outbounds: %v", oldTag, err)
 		}
 	}
 	return nil

@@ -10,10 +10,8 @@ import (
 	"strings"
 
 	"github.com/bitly/go-simplejson"
-	//"github.com/go-resty/resty/v2"
 )
 
-// GetServerNodes fetches the list of node IDs assigned to this machine (server mode).
 func (c *Client) GetServerNodes() (*ServerNodesResponse, error) {
 	res, err := c.client.R().
 		SetBody(map[string]string{"key": c.APIKey, "core": "singbox"}).
@@ -43,8 +41,6 @@ func (c *Client) GetServerNodes() (*ServerNodesResponse, error) {
 	return &resp, nil
 }
 
-// ReportServerStatus sends machine health metrics to the panel.
-// serverID is the machine ID (not the node ID).
 func (c *Client) ReportServerStatus(serverID int, status *ServerStatus) error {
 	postData := &PostData{Key: c.APIKey, Data: status}
 
@@ -73,7 +69,6 @@ func (c *Client) ReportCertHash(data *CertHash) error {
 	return nil
 }
 
-// GetNodeInfo fetches and parses the configuration for c.NodeID.
 func (c *Client) GetNodeInfo() (*NodeInfo, error) {
 	server := new(serverConfig)
 
@@ -120,7 +115,6 @@ func (c *Client) GetNodeInfo() (*NodeInfo, error) {
 	return nodeInfo, nil
 }
 
-// NodeResponse converts a raw serverConfig into a NodeInfo.
 func (c *Client) NodeResponse(s *serverConfig) (*NodeInfo, error) {
 	nodeInfo := &NodeInfo{
 		ID:             c.NodeID,
@@ -170,8 +164,6 @@ func (c *Client) NodeResponse(s *serverConfig) (*NodeInfo, error) {
 	return nodeInfo, nil
 }
 
-// parseFallbackConfig reads the optional "fallback" object from network settings.
-// The panel sends a single object with "server" and "server_port" fields.
 func (c *Client) parseFallbackConfig(networkData *simplejson.Json) (*FallbackConfig, error) {
 	fallbackJSON, ok := networkData.CheckGet("fallback")
 	if !ok {
@@ -237,10 +229,6 @@ func (c *Client) parseNetworkSettings(networkData *simplejson.Json, nodeInfo *No
 		return fmt.Errorf("missing transportProtocol.settings")
 	}
 
-	// ShadowTLS is declared as a plug-in on the transport. Only tcp can carry
-	// it: a fronted node's connections arrive by injection through a detour,
-	// which bypasses the transport layer, so ws, grpc and httpupgrade would be
-	// spoken by the client and never read by the server.
 	if plugin, ok := transport.CheckGet("plug-in"); ok {
 		name, _ := plugin.CheckGet("name")
 		if name != nil && strings.EqualFold(name.MustString(), "shadowtls") {
@@ -343,10 +331,6 @@ func (c *Client) parseNetworkSettings(networkData *simplejson.Json, nodeInfo *No
 	return nil
 }
 
-// parseShadowTLSSettings reads the ShadowTLS plug-in block. That plug-in is the
-// only way ShadowTLS is enabled — there is no top-level switch and no protocol
-// named after it — so a node either declares it on its tcp transport or is not
-// fronted at all.
 func parseShadowTLSSettings(data *simplejson.Json) *ShadowTLSSettings {
 	settings := &ShadowTLSSettings{Version: 3}
 	if v, ok := data.CheckGet("version"); ok {
@@ -479,8 +463,6 @@ func (c *Client) parseSecuritySettings(securityData *simplejson.Json, nodeInfo *
 	return nil
 }
 
-// GetTransitNode builds a RelayNodeInfo from the transit_server section of
-// the most recently fetched serverConfig (cached by GetNodeInfo).
 func (c *Client) GetTransitNode() (*RelayNodeInfo, error) {
 	cached := c.resp.Load()
 	if cached == nil {
@@ -535,9 +517,6 @@ func (c *Client) GetTransitNode() (*RelayNodeInfo, error) {
 	return nodeInfo, nil
 }
 
-// parseRelayNetworkSettings parses the transit node's transport settings into
-// nodeInfo.Port and nodeInfo.NetworkSettings, reusing the same wire format as
-// parseNetworkSettings.
 func (c *Client) parseRelayNetworkSettings(networkData *simplejson.Json, nodeInfo *RelayNodeInfo) error {
 	/*portNode, ok := networkData.CheckGet("listen_port")
 	if !ok {
@@ -555,9 +534,6 @@ func (c *Client) parseRelayNetworkSettings(networkData *simplejson.Json, nodeInf
 		nodeInfo.Cipher = cipher.MustString()
 	}
 
-	// Reuse the regular NodeInfo network-settings parser for transport-level
-	// fields (transportProtocol, ws/grpc/httpupgrade options, hysteria2,
-	// tuic, shadowtls, anytls, naive, etc.).
 	tmp := &NodeInfo{}
 	if err := c.parseNetworkSettings(networkData, tmp); err != nil {
 		return err
@@ -573,8 +549,6 @@ func (c *Client) parseRelayNetworkSettings(networkData *simplejson.Json, nodeInf
 	return nil
 }
 
-// parseRelaySecuritySettings parses the transit node's security settings
-// (TLS/Reality) into nodeInfo.TlsSettings.
 func (c *Client) parseRelaySecuritySettings(securityData *simplejson.Json, nodeInfo *RelayNodeInfo) error {
 	tls := &TlsSettings{}
 
@@ -616,9 +590,6 @@ func (c *Client) parseRelaySecuritySettings(securityData *simplejson.Json, nodeI
 	return nil
 }
 
-// GetNodeRule fetches the blocking rules for c.NodeID.
-// GetBlockRules fetches the block rules for c.NodeID.
-// It returns RuleNotModified when the panel answers 304.
 func (c *Client) GetBlockRules() ([]BlockRule, error) {
 	res, err := c.client.R().
 		SetBody(map[string]string{"key": c.APIKey, "core": "singbox"}).
@@ -637,16 +608,15 @@ func (c *Client) GetBlockRules() ([]BlockRule, error) {
 	if err != nil {
 		return nil, err
 	}
-	list, ok := response.CheckGet("ruleSettings")
+	list, ok := response.CheckGet("blockingRule")
 	if !ok {
-		return nil, fmt.Errorf("rules response has no ruleSettings, is the panel up to date?")
+		return []BlockRule{}, nil
 	}
 	rules, err := parseBlockRules(list)
 	if err != nil {
 		return nil, fmt.Errorf("parse rules: %w", err)
 	}
 
-	// Remember the ETag only after a good parse, so a bad response is retried.
 	if etag := res.Header().Get("ETag"); etag != "" {
 		c.eTags["rule"] = etag
 	}
@@ -710,7 +680,6 @@ func parseBlockRules(list *simplejson.Json) ([]BlockRule, error) {
 		}
 		r.NoDrop = r.Method == "default" && v.Get("no_drop").MustBool()
 
-		// A rule with no condition would block everything on the node, skip it.
 		if len(r.Network)+len(r.Protocol)+len(r.Domain)+len(r.DomainSuffix)+len(r.DomainKeyword)+
 			len(r.DomainRegex)+len(r.SourceIPCIDR)+len(r.IPCIDR)+len(r.Port)+len(r.PortRange) == 0 {
 			continue
@@ -720,7 +689,6 @@ func parseBlockRules(list *simplejson.Json) ([]BlockRule, error) {
 	return rules, nil
 }
 
-// isBlockRule: the reject action, or a route to the legacy "block" outbound.
 func isBlockRule(v *simplejson.Json) bool {
 	action := strings.ToLower(strings.TrimSpace(v.Get("action").MustString()))
 	switch action {
@@ -732,8 +700,6 @@ func isBlockRule(v *simplejson.Json) bool {
 	return false
 }
 
-// ruleStrings reads an array or a single string, trimmed, without empty entries.
-// It does not split on commas, a domain regex may contain them.
 func ruleStrings(j *simplejson.Json, key string) []string {
 	v, ok := j.CheckGet(key)
 	if !ok {
@@ -754,8 +720,6 @@ func ruleStrings(j *simplejson.Json, key string) []string {
 	return out
 }
 
-// ruleCSVPorts reads port (numbers or strings) and port_range, and returns
-// single ports and "from:to" ranges. "-" is accepted as the range separator.
 func ruleCSVPorts(v *simplejson.Json) ([]uint16, []string, error) {
 	var ports []uint16
 	var ranges []string

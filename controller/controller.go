@@ -6,6 +6,7 @@ import (
 	"log"
 	"reflect"
 	"regexp"
+	"sync"
 	"time"
 
 	"github.com/xmplusdev/xmbox/api"
@@ -55,6 +56,8 @@ type Controller struct {
 	relayNodeInfo *api.RelayNodeInfo
 	RelayTag      string
 	Relay         bool
+	relayGen      int
+	relaySubs     *[]api.SubscriptionInfo // subscriptions the current relay was built for
 
 	taskManager *scheduler.Manager
 	nodeManager *node.Manager
@@ -69,6 +72,13 @@ type Controller struct {
 	// pusher is the active Reverb push function from the parent instance.
 	// It is optional; when set, traffic reports can be pushed over WebSocket.
 	pusher func(string, any) error
+
+	// mu serializes apiMonitor, ruleMonitor and Close, which run on different
+	// goroutines and all change the router.
+	mu           sync.Mutex
+	closed       bool
+	pendingRules []api.BlockRule
+	hasPending   bool
 }
 
 // New constructs a Controller.  pusher may be nil.
@@ -100,9 +110,9 @@ func (c *Controller) nodePusher() func(string, any) error {
 	push := c.pusher
 	return func(event string, data any) error {
 		return push(event, map[string]any{
-			"node_id":  nodeID,
+			"node_id":   nodeID,
 			"server_id": c.coreInstance.GetServerID(),
-			"data":     data,
+			"data":      data,
 		})
 	}
 }
@@ -151,6 +161,12 @@ func (c *Controller) Start() error {
 	}
 	c.subscriptionList = subscriptions
 
+	// The relay goes up before the inbound accepts connections.
+	if err := c.syncRelay(c.nodeInfo, c.subscriptionList, true, true); err != nil {
+		return fmt.Errorf("relay: %w", err)
+	}
+
+	// AddNode puts the block rules in front of the relay rules.
 	if err := c.nodeManager.AddNode(c.nodeInfo, c.Tag, c.config, c.nodePusher(), c.blockRules); err != nil {
 		return fmt.Errorf("AddNode: %w", err)
 	}
@@ -160,12 +176,6 @@ func (c *Controller) Start() error {
 	}
 	log.Printf("%s added %d subscriptions", c.LogPrefix, len(*subscriptions))
 
-	if err := c.setupRelay(c.nodeInfo, c.subscriptionList); err != nil {
-		return fmt.Errorf("setupRelay: %w", err)
-	}
-
-	// AddLimiter no longer takes a RedisConfig — the global client is already
-	// initialised at instance start via limiter.Init().
 	if err := limiter.AddLimiter(
 		c.Tag,
 		nodeInfo.UpdateInterval,
@@ -184,7 +194,7 @@ func (c *Controller) Start() error {
 	c.taskManager.Add(scheduler.NewWithDelay(c.LogPrefix, "rules", c.currentPollInterval, c.ruleMonitor))
 
 	c.addCertTasks()
-	
+
 	go c.webhookTriggerLoop(c.currentPollInterval)
 
 	log.Printf("%s starting %d task schedulers", c.LogPrefix, c.taskManager.Count())
@@ -194,20 +204,19 @@ func (c *Controller) Start() error {
 func (c *Controller) Close() error {
 	log.Printf("%s closing %d task schedulers", c.LogPrefix, c.taskManager.Count())
 	c.triggerCancel()
+
+	// A monitor that is waiting for the lock sees `closed` and does nothing.
+	c.mu.Lock()
+	c.closed = true
 	if err := limiter.DeleteLimiter(c.Tag); err != nil {
 		log.Printf("%s DeleteLimiter error: %v", c.LogPrefix, err)
 	}
 	if err := c.nodeManager.RemoveNode(c.Tag); err != nil {
 		log.Printf("%s Close RemoveNode error: %v", c.LogPrefix, err)
 	}
-	if c.Relay {
-		if err := c.nodeManager.RemoveRelayRules(c.RelayTag, c.subscriptionList); err != nil {
-			log.Printf("%s Close RemoveRelayRules error: %v", c.LogPrefix, err)
-		}
-		if err := c.nodeManager.RemoveRelayTag(c.RelayTag, c.subscriptionList); err != nil {
-			log.Printf("%s Close RemoveRelayTag error: %v", c.LogPrefix, err)
-		}
-	}
+	c.teardownRelay()
+	c.mu.Unlock()
+
 	return c.taskManager.CloseAll()
 }
 
@@ -298,6 +307,12 @@ func nodeInfoChangedStructurally(old, new *api.NodeInfo) bool {
 // apiMonitor fetches updated node info and subscription list, then reconciles
 // the running state accordingly.
 func (c *Controller) apiMonitor() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed {
+		return nil
+	}
+
 	nodeInfoChanged := true
 	newNodeInfo, err := c.client.GetNodeInfo()
 	if err != nil {
@@ -324,17 +339,8 @@ func (c *Controller) apiMonitor() error {
 
 	nodeInfoActuallyChanged := nodeInfoChanged && nodeInfoChangedStructurally(c.nodeInfo, newNodeInfo)
 
-	if c.Relay && (nodeInfoActuallyChanged || subscriptionChanged) {
-		if err := c.nodeManager.RemoveRelayRules(c.RelayTag, c.subscriptionList); err != nil {
-			log.Printf("%s RemoveRelayRules error: %v", c.LogPrefix, err)
-		}
-		if err := c.nodeManager.RemoveRelayTag(c.RelayTag, c.subscriptionList); err != nil {
-			log.Printf("%s RemoveRelayTag error: %v", c.LogPrefix, err)
-		}
-		c.Relay = false
-		c.RelayTag = ""
-		c.relayNodeInfo = nil
-	}
+	// Set when the structural branch below already brought the relay up to date.
+	relaySynced := false
 
 	if nodeInfoActuallyChanged {
 		oldTag := c.Tag
@@ -351,6 +357,17 @@ func (c *Controller) apiMonitor() error {
 		c.LogPrefix = c.logPrefix()
 		c.syncCertTasks()
 
+		// The inbound is rebuilt, so the relay has to follow it. A new tag means the
+		// relay rules still point at the old inbound and must be rebuilt.
+		if err := c.syncRelay(c.nodeInfo, newSubs, subscriptionChanged || oldTag != c.Tag, true); err != nil {
+			log.Printf("%s syncRelay error: %v", c.LogPrefix, err)
+			if oldTag != c.Tag {
+				c.teardownRelay()
+			}
+		} else {
+			relaySynced = true
+		}
+
 		if err := c.nodeManager.AddNode(newNodeInfo, c.Tag, c.config, c.nodePusher(), c.blockRules); err != nil {
 			log.Printf("%s AddNode error: %v", c.LogPrefix, err)
 			c.nodeInfo, c.Tag = oldNodeInfo, oldTag
@@ -359,10 +376,6 @@ func (c *Controller) apiMonitor() error {
 
 		if err := c.subManager.AddSubscriptions(newSubs, newNodeInfo, c.Tag); err != nil {
 			log.Printf("%s AddSubscriptions error: %v", c.LogPrefix, err)
-		}
-
-		if err := c.setupRelay(newNodeInfo, newSubs); err != nil {
-			log.Printf("%s setupRelay error: %v", c.LogPrefix, err)
 		}
 
 		if oldTag != c.Tag {
@@ -414,7 +427,7 @@ func (c *Controller) apiMonitor() error {
 		if nodeInfoChanged {
 			c.nodeInfo = newNodeInfo
 			c.syncCertTasks()
-			
+
 			if err := limiter.UpdateNodeInfo(c.Tag, newNodeInfo.SpeedLimit, newNodeInfo.IgnoreIPs); err != nil {
 				log.Printf("%s UpdateNodeInfo error: %v", c.LogPrefix, err)
 			}
@@ -473,57 +486,111 @@ func (c *Controller) apiMonitor() error {
 				}
 				log.Printf("%s modified %d subscription(s)", c.LogPrefix, len(modified))
 			}
-
-			if err := c.setupRelay(c.nodeInfo, newSubs); err != nil {
-				log.Printf("%s setupRelay error: %v", c.LogPrefix, err)
-			}
 		}
+	}
+
+	// Runs on every poll, not only when subscriptions change. It is cheap when
+	// nothing changed (no request), and it also retries a relay that failed to build.
+	if err := c.syncRelay(c.nodeInfo, newSubs, !relaySynced && subscriptionChanged, !relaySynced && nodeInfoChanged); err != nil {
+		log.Printf("%s syncRelay error: %v", c.LogPrefix, err)
 	}
 
 	c.subscriptionList = newSubs
 	return nil
 }
 
-// setupRelay configures per-subscription relay outbounds and routing rules
-// when nodeInfo declares a transit (relay) node. It is a no-op if no relay is
-// configured, or if relay is already set up for the current RelayTag.
-func (c *Controller) setupRelay(nodeInfo *api.NodeInfo, subscriptions *[]api.SubscriptionInfo) error {
-	if nodeInfo.RelayType != 2 || nodeInfo.RelayNodeID <= 0 {
+// teardownRelay removes the relay, rules first, then its outbounds.
+func (c *Controller) teardownRelay() {
+	if !c.Relay {
+		return
+	}
+	if err := c.nodeManager.RemoveRelayRules(c.RelayTag, c.relaySubs); err != nil {
+		log.Printf("%s RemoveRelayRules error: %v", c.LogPrefix, err)
+	}
+	if err := c.nodeManager.RemoveRelayTag(c.RelayTag, c.relaySubs); err != nil {
+		log.Printf("%s RemoveRelayTag error: %v", c.LogPrefix, err)
+	}
+	c.Relay, c.RelayTag, c.relayNodeInfo, c.relaySubs = false, "", nil, nil
+}
+
+// sameRelay compares two transit infos. The port is ignored: GetTransitNode
+// picks a random port from a range on every call.
+func sameRelay(a, b *api.RelayNodeInfo) bool {
+	if a == nil || b == nil {
+		return false
+	}
+	x, y := *a, *b
+	x.Port, y.Port = 0, 0
+	return reflect.DeepEqual(x, y)
+}
+
+// syncRelay makes the relay match the panel. subsChanged and infoChanged say
+// what changed since the relay was built. A wanted relay that is missing, for
+// example after an earlier failure, is built whatever the flags say.
+// A new relay is built under a fresh tag before the old one is removed, so
+// relayed users always have a relay rule.
+func (c *Controller) syncRelay(info *api.NodeInfo, subs *[]api.SubscriptionInfo, subsChanged, infoChanged bool) error {
+	if info.RelayType != 2 || info.RelayNodeID <= 0 {
+		c.teardownRelay()
 		return nil
 	}
-	if c.Relay {
+	if c.Relay && !subsChanged && !infoChanged {
 		return nil
 	}
 
-	relayNodeInfo, err := c.client.GetTransitNode()
+	fresh, err := c.client.GetTransitNode()
 	if err != nil {
 		return fmt.Errorf("GetTransitNode: %w", err)
 	}
-	c.relayNodeInfo = relayNodeInfo
-	c.RelayTag = c.buildRelayTag()
-
-	if err := c.nodeManager.AddRelayTag(relayNodeInfo, c.RelayTag, c.Tag, subscriptions); err != nil {
-		return fmt.Errorf("AddRelayTag: %w", err)
+	if c.Relay && !subsChanged && sameRelay(c.relayNodeInfo, fresh) {
+		return nil // the node info changed, the transit server did not
 	}
-	c.Relay = true
+
+	oldTag, oldSubs, oldInfo, wasOn := c.RelayTag, c.relaySubs, c.relayNodeInfo, c.Relay
+	if !wasOn {
+		oldTag, oldSubs = "", nil
+	}
+
+	c.relayGen++
+	c.relayNodeInfo = fresh
+	newTag := c.buildRelayTag()
+
+	if err := c.nodeManager.SwapRelay(oldTag, oldSubs, fresh, newTag, c.Tag, subs); err != nil {
+		c.relayNodeInfo = oldInfo // the old relay keeps serving
+		return fmt.Errorf("SwapRelay: %w", err)
+	}
+	c.RelayTag, c.relaySubs, c.Relay = newTag, subs, true
 	return nil
 }
 
 func (c *Controller) ruleMonitor() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed {
+		return nil
+	}
+
 	rules, err := c.client.GetBlockRules()
-	if err != nil {
-		if err.Error() == api.RuleNotModified {
+	switch {
+	case err == nil:
+		c.pendingRules, c.hasPending = rules, true
+	case err.Error() == api.RuleNotModified:
+		if !c.hasPending {
 			return nil
 		}
+		// An earlier apply failed, retry the rules we already fetched.
+	default:
 		log.Printf("%s GetBlockRules error: %v", c.LogPrefix, err)
 		return err
 	}
-	if err := c.nodeManager.SetBlockRules(c.Tag, rules); err != nil {
+
+	if err := c.nodeManager.SetBlockRules(c.Tag, c.pendingRules); err != nil {
 		log.Printf("%s SetBlockRules error: %v", c.LogPrefix, err)
 		return err
 	}
-	c.blockRules = rules
-	log.Printf("%s updated %d block rules", c.LogPrefix, len(rules))
+	c.blockRules = c.pendingRules
+	c.pendingRules, c.hasPending = nil, false
+	log.Printf("%s updated %d block rules", c.LogPrefix, len(c.blockRules))
 	return nil
 }
 
@@ -567,20 +634,22 @@ func (c *Controller) buildNodeTag() string {
 	return fmt.Sprintf("%s_%d_%d", c.nodeInfo.Protocol, c.nodeInfo.ListenPort, c.nodeInfo.ID)
 }
 
+// buildRelayTag is unique per build (relayGen), so a new relay can be created
+// next to the old one before the old one is removed.
 func (c *Controller) buildRelayTag() string {
-	return fmt.Sprintf("relay_%s_%d_%d", c.relayNodeInfo.NodeType, c.relayNodeInfo.Port, c.nodeInfo.RelayNodeID)
+	return fmt.Sprintf("relay_%s_%d_%d_v%d", c.relayNodeInfo.NodeType, c.relayNodeInfo.Port, c.nodeInfo.RelayNodeID, c.relayGen)
 }
 
 // selfSignedCertMonitor generates a self-signed certificate and pushes its
 // hashes to the panel via Reverb. It runs as its own scheduled task rather
 // than being mixed into certMonitor's ACME/Lego flow.
 func (c *Controller) selfSignedCertMonitor() error {
-    info := c.nodeInfo
-    if info == nil || info.TlsSettings == nil || info.TlsSettings.CertMode != "self-signed" {
-        return nil
-    }
-    if _, _, err := node.SelfSignedCertFile(info.TlsSettings, c.nodePusher(), c.client); err != nil {
-        log.Printf("%s self-signed cert renewal failed: %v", c.LogPrefix, err)
-    }
-    return nil
+	info := c.nodeInfo
+	if info == nil || info.TlsSettings == nil || info.TlsSettings.CertMode != "self-signed" {
+		return nil
+	}
+	if _, _, err := node.SelfSignedCertFile(info.TlsSettings, c.nodePusher(), c.client); err != nil {
+		log.Printf("%s self-signed cert renewal failed: %v", c.LogPrefix, err)
+	}
+	return nil
 }

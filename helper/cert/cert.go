@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -143,9 +142,15 @@ func (l *LegoCMD) RenewCert(CertMode string, CertDomain string, Email string) (C
 			}
 			return "", "", false, err
 		}
-		return CertPath, KeyPath, ok, nil
+		return CertPath, KeyPath, false, nil
 	}()
 
+	due := l.renewalDue(CertDomain, 30)
+	if !due {
+		CertPath, KeyPath, err = checkCertFile(CertDomain)
+		return CertPath, KeyPath, false, err
+	}
+	
 	mode := strings.ToLower(CertMode)
 	if mode == "http" || mode == "tls" {
 		port := "80"
@@ -174,8 +179,8 @@ func (l *LegoCMD) RenewCert(CertMode string, CertDomain string, Email string) (C
 }
 
 func checkCertFile(domain string) (string, string, error) {
-	keyPath := path.Join(defaultPath, "certificates", fmt.Sprintf("%s.key", sanitizedDomain(domain)))
-	certPath := path.Join(defaultPath, "certificates", fmt.Sprintf("%s.crt", sanitizedDomain(domain)))
+	keyPath := filepath.Join(defaultPath, "certificates", fmt.Sprintf("%s.key", sanitizedDomain(domain)))
+	certPath := filepath.Join(defaultPath, "certificates", fmt.Sprintf("%s.crt", sanitizedDomain(domain)))
 	if _, err := os.Stat(keyPath); os.IsNotExist(err) {
 		return "", "", fmt.Errorf("cert key not found: %s", domain)
 	}
@@ -236,7 +241,6 @@ func getServiceOnPort(port string) *ServiceInfo {
 
 func identifyService(processName string) *ServiceInfo {
 	lower := strings.ToLower(processName)
-		// Never stop XMBox itself — cert renewal runs inside this process.
 	if strings.Contains(lower, "xmbox") {
 		return nil
 	}
@@ -247,8 +251,7 @@ func identifyService(processName string) *ServiceInfo {
 		"caddy":    "caddy",
 		"traefik":  "traefik",
 		"lighttpd": "lighttpd",
-		"xmray":    "XMRay",
-		"XMRay":    "XMRay",
+		"xmray":    "xmray",
 	}
 	for proc, service := range serviceMap {
 		if strings.Contains(lower, proc) {
